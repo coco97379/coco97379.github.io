@@ -192,7 +192,7 @@
           { method: 'PUT', body: JSON.stringify({ values: [row] }) });
       },
       async appendRows(rows) {
-        await call('/values/' + encodeURIComponent('Jours!A:O') + ':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS',
+        await call('/values/' + encodeURIComponent('Jours!A:O') + ':append?valueInputOption=RAW&insertDataOption=OVERWRITE',
           { method: 'POST', body: JSON.stringify({ values: rows }) });
       },
       async getMeta() {
