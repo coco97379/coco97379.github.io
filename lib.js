@@ -28,7 +28,7 @@
     return new Date(Date.UTC(y, month - 1, day));
   };
 
-  AG.TERRITOIRES = ['Guyane', 'Métropole', 'Nouvelle-Calédonie', 'Mayotte'];
+  AG.TERRITOIRES = ['Guyane', 'Guadeloupe', 'Martinique', 'La Réunion', 'Mayotte', 'Saint-Martin', 'Saint-Barthélemy', 'Saint-Pierre-et-Miquelon', 'Polynésie française', 'Wallis-et-Futuna', 'Nouvelle-Calédonie', 'Métropole'];
 
   /* Retourne { 'AAAA-MM-JJ': { nom, legal } } pour une année et un territoire.
      legal = jour férié légal ; sinon usage local (jours gras, etc.), affiché plus discrètement. */
@@ -53,6 +53,14 @@
       put(AG.iso(y, 9, 24), 'Fête de la Citoyenneté', true);
     } else if (territoire === 'Mayotte') {
       put(AG.iso(y, 4, 27), "Abolition de l'esclavage", true);
+    } else if (territoire === 'Guadeloupe' || territoire === 'Saint-Martin') {
+      put(AG.iso(y, 5, 27), "Abolition de l'esclavage", true);
+    } else if (territoire === 'Martinique') {
+      put(AG.iso(y, 5, 22), "Abolition de l'esclavage", true);
+    } else if (territoire === 'La Réunion') {
+      put(AG.iso(y, 12, 20), "Abolition de l'esclavage", true);
+    } else if (territoire === 'Saint-Barthélemy') {
+      put(AG.iso(y, 10, 9), "Abolition de l'esclavage", true);
     }
     return out;
   };
@@ -182,6 +190,16 @@
       if (!res.ok) { const e = new Error('Google ' + res.status); e.code = 'http'; throw e; }
       return res.json();
     }
+    let gridRows = 0;
+    async function ensureGrid(needRows) {
+      try {
+        const j = await call('?fields=' + encodeURIComponent('sheets(properties(sheetId,title,gridProperties(rowCount,columnCount)))'));
+        const sh = (j.sheets || []).map((s) => s.properties).find((p) => p && p.title === 'Jours'); if (!sh) return;
+        const g = sh.gridProperties || {}, cols = Math.max(g.columnCount || 0, 32), rows = Math.max(g.rowCount || 0, needRows + 200);
+        if (cols !== g.columnCount || rows !== g.rowCount) await call(':batchUpdate', { method: 'POST', body: JSON.stringify({ requests: [{ updateSheetProperties: { properties: { sheetId: sh.sheetId, gridProperties: { rowCount: rows, columnCount: cols } }, fields: 'gridProperties(rowCount,columnCount)' } }] }) });
+        gridRows = rows;
+      } catch (e) { if (e.code === 'auth') throw e; gridRows = needRows + 200; }
+    }
     return {
       /* Lit A2:AF et recale chaque ligne sur son identifiant (st-, no-, ac-, rv-) :
          répare les lignes décalées par une ancienne version. rows.mis = indices recalés. */
@@ -200,6 +218,7 @@
       async writeRows(start, rows) {
         const w = (r) => { const x = padRow(r); while (x.length < 32) x.push(''); return x; };
         const end = start + rows.length - 1;
+        if (!gridRows || end > gridRows) await ensureGrid(end);
         await call('/values/' + encodeURIComponent('Jours!A' + start + ':AF' + end) + '?valueInputOption=RAW',
           { method: 'PUT', body: JSON.stringify({ values: rows.map(w) }) });
       },

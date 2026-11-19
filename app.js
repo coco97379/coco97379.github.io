@@ -29,7 +29,7 @@
   const S = {
     phase: 'boot', view: 'mois', dk: null, meta: null, rows: new Map(), pending: new Set(), entries: new Map(),
     y: now.getFullYear(), m: now.getMonth() + 1, date: todayIso, territoire: 'Guyane', local: true,
-    perms: PERM_DEF.slice(), permOpen: '', sync: 'idle', syncInfo: '', form: null, toast: '', err: '', busy: false, confirmDel: false, metaDirty: false, tmp: {}
+    cy: now.getFullYear(), perms: PERM_DEF.slice(), permOpen: '', sync: 'idle', syncInfo: '', form: null, toast: '', err: '', busy: false, confirmDel: false, metaDirty: false, tmp: {}
   };
 
   /* ---------- Stockage local (IndexedDB) ---------- */
@@ -114,7 +114,7 @@
       if (!S.tmp.terrChecked) { S.tmp.terrChecked = true; const t = await kvGet('territoire'); if (!t) { const tr = await a.getTerritoire().catch(() => ''); if (AG.TERRITOIRES.includes(tr)) { S.territoire = tr; await kvSet('territoire', tr); } } }
       S.sync = S.pending.size ? 'off' : 'ok'; S.syncInfo = '';
       if (r.conflicts) toast(r.conflicts + ' modification(s) remplacée(s) par une version plus récente faite ailleurs.');
-    } catch (e) { S.sync = e.code === 'auth' ? 'auth' : 'off'; }
+    } catch (e) { S.sync = e.code === 'auth' ? 'auth' : 'off'; S.syncInfo = e.code === 'auth' ? '' : (e.message || 'erreur'); }
     S.busy = false; render();
   }
 
@@ -227,6 +227,32 @@
       '<button class="iconbtn" data-act="yPrev" aria-label="Année précédente">‹</button><button class="iconbtn" data-act="yNext" aria-label="Année suivante">›</button>' + gear + '</div></div>' +
       legend() + '<div class="sub" style="padding-bottom:6px">Touche un jour pour ouvrir son détail. Point plein : jour férié. Point creux : usage local.</div>' +
       '<div class="yscroll"><div class="ygrid">' + head + rows + '</div></div>';
+  }
+
+  function stats(y) {
+    const cnt = {}; Object.keys(CATS).forEach((k) => { cnt[k] = 0; });
+    const pre = String(y) + '-', worked = [], hol = holidays(y);
+    S.entries.forEach((e) => { if (e.kind === 'statut' && !e.del && e.date.startsWith(pre)) { const c = e.statut === 'P' ? 'PERM' : e.statut; if (cnt[c] !== undefined) cnt[c]++; } });
+    Object.keys(hol).sort().forEach((iso) => {
+      const h = hol[iso]; if (!h.legal || !iso.startsWith(pre)) return;
+      const c = statutOf(iso), act = dayEntries(iso, ['activite', 'rdv']).length > 0;
+      if (isPerm(c)) worked.push({ iso, nom: h.nom, how: CATS[c].n }); else if (!c && act) worked.push({ iso, nom: h.nom, how: 'Activité / rendez-vous' });
+    });
+    return { cnt, worked };
+  }
+  function viewCompteurs() {
+    const y = S.cy, { cnt, worked } = stats(y), po = ['PAM', 'A', 'OPJ', 'PERM'], totalP = po.reduce((t, k) => t + cnt[k], 0);
+    const big = (n, l, c) => '<div class="card" style="padding:12px 14px;flex:1;min-width:0"><div style="font-size:28px;font-weight:700;line-height:1.1;color:' + c + '">' + n + '</div><div style="font-size:12px;color:#4B5563;margin-top:2px">' + l + '</div></div>';
+    const barsOf = (keys) => { const max = Math.max(1, ...keys.map((k) => cnt[k])); return keys.map((k) => '<div style="display:flex;align-items:center;gap:8px;min-height:30px"><div style="width:84px;font-size:12px;flex:none">' + esc(k === 'C' ? 'Congé/perm.' : k === 'A' ? 'Accueil' : k === 'PERM' ? 'Perm' : k === 'RR' ? 'RR' : k === 'R' ? 'Repos' : k === 'F' ? 'Formation' : k) + '</div>' +
+      '<div style="flex:1;background:#E5E7EB;border-radius:6px;height:20px;overflow:hidden"><div style="height:100%;width:' + Math.round(cnt[k] / max * 100) + '%;background:' + (CATS[k].w ? '#6B7280' : CATS[k].t === '#FF3B30' ? CATS[k].c : CATS[k].c === '#BFDBFE' ? '#60A5FA' : CATS[k].c) + ';border-radius:6px"></div></div><div style="width:30px;text-align:right;font-weight:700;font-size:13px">' + cnt[k] + '</div></div>').join(''); };
+    const wl = worked.length ? worked.map((w) => '<div style="display:flex;gap:10px;font-size:13px;padding:5px 0;border-top:1px solid #E5E7EB"><div style="width:52px;font-weight:600;flex:none">' + w.iso.slice(8) + '/' + w.iso.slice(5, 7) + '</div><div style="flex:1">' + esc(w.nom) + '<div style="font-size:12px;color:#4B5563">' + esc(w.how) + '</div></div></div>').join('') : '<div style="font-size:13px;color:#4B5563">Aucun jour férié travaillé pour l\'instant.</div>';
+    return '<div class="top"><div class="title">Compteurs ' + y + '</div>' + pill() + '<div style="display:flex;align-items:center;gap:2px"><button class="iconbtn" data-act="cPrev" aria-label="Année précédente">‹</button><button class="iconbtn" data-act="cNext" aria-label="Année suivante">›</button>' + gear + '</div></div>' +
+      '<div class="sec" style="display:flex;gap:10px">' + big(cnt.C, 'jours de congé / permission', '#DC2626') + big(cnt.RR, 'repos récupérateurs', '#16A34A') + '</div>' +
+      '<div class="sec" style="display:flex;gap:10px;padding-top:0">' + big(totalP, 'jours de permanence', '#1D4ED8') + big(worked.length, 'jours fériés travaillés', '#B45309') + '</div>' +
+      '<div class="sec"><div class="lab">PERMANENCES PAR TYPE</div><div class="card" style="padding:10px 14px">' + barsOf(po) + '</div></div>' +
+      '<div class="sec" style="padding-top:0"><div class="lab">AUTRES STATUTS</div><div class="card" style="padding:10px 14px">' + barsOf(['C', 'RR', 'R', 'RPC', 'F']) + '</div></div>' +
+      '<div class="sec"><div class="lab">JOURS FÉRIÉS TRAVAILLÉS (' + esc(S.territoire).toUpperCase() + ')</div><div class="card" style="padding:6px 14px">' + wl + '</div>' +
+      '<div class="sub" style="padding:8px 0 0">Compte un jour férié légal où tu as une permanence, ou une activité / un rendez-vous sans statut de repos.</div></div>';
   }
 
   function viewMonth() {
@@ -348,7 +374,7 @@
       '<label style="font-size:13px;display:flex;gap:8px;align-items:center"><input type="checkbox" id="loc" data-act="loc"' + (S.local ? ' checked' : '') + '> Montrer les usages locaux (jours gras en Guyane)</label></div>' +
       '<div class="set"><h3>TYPES DE PERMANENCE</h3><div style="font-size:13px;color:#4B5563;margin-bottom:8px">Coche ceux que tu veux voir. Un seul coché : le bouton Permanence s\'applique directement.</div>' +
       PERM_TYPES.map((k) => '<label class="pc"><input type="checkbox" data-act="permSet" data-code="' + k + '"' + (permsOn().includes(k) ? ' checked' : '') + '><span>' + esc(k === 'PERM' ? 'Permanence simple (Perm)' : CATS[k].n) + '</span><i class="pb" style="' + chipStyle(k) + '">' + esc(CATS[k].s) + '</i></label>').join('') + '</div>' +
-      '<div class="set"><h3>SYNCHRONISATION</h3><div style="font-size:13px;color:#4B5563;margin-bottom:10px">' + (n ? n + ' modification(s) en attente d\'envoi.' : 'Tout est envoyé dans le Sheet.') + '</div>' +
+      '<div class="set"><h3>SYNCHRONISATION</h3><div style="font-size:13px;color:#4B5563;margin-bottom:10px">' + (n ? n + ' modification(s) en attente d\'envoi.' : S.sync === 'off' ? 'La dernière synchronisation a échoué' + (S.syncInfo ? ' (' + esc(S.syncInfo) + ')' : '') + '.' : 'Tout est envoyé dans le Sheet.') + '</div>' +
       '<div class="row2"><button class="btn" data-act="syncNow">Synchroniser</button><button class="btn" data-act="reauth">Connexion Google</button></div></div>' +
       '<div class="set"><h3>MOT DE PASSE</h3><div class="field"><input class="inp" id="op" type="password" placeholder="Mot de passe actuel" autocomplete="current-password"></div><div class="field"><input class="inp" id="np2" type="password" placeholder="Nouveau mot de passe (10 caractères minimum)" autocomplete="new-password"></div>' +
       '<button class="btn" data-act="chgPw">Changer le mot de passe</button><div class="err" style="margin-top:8px">' + esc(S.err) + '</div></div>' +
@@ -363,8 +389,8 @@
     else if (S.view === 'settings') html = '<div class="main">' + viewSettings() + '</div>';
     else if (S.view === 'periode' && S.per) html = '<div class="main">' + viewPer() + '</div>';
     else {
-      const v = S.view === 'annee' ? viewYear() : S.view === 'jour' ? viewDay() : viewMonth();
-      html = '<div class="main">' + v + '</div><div class="tabs">' + [['annee', 'Année'], ['mois', 'Mois'], ['jour', 'Jour']].map(([k, n]) => '<button class="' + (S.view === k ? 'on' : '') + '" data-act="tab" data-v="' + k + '">' + n + '</button>').join('') + '</div>';
+      const v = S.view === 'annee' ? viewYear() : S.view === 'jour' ? viewDay() : S.view === 'compteurs' ? viewCompteurs() : viewMonth();
+      html = '<div class="main">' + v + '</div><div class="tabs">' + [['annee', 'Année'], ['mois', 'Mois'], ['jour', 'Jour'], ['compteurs', 'Compteurs']].map(([k, n]) => '<button class="' + (S.view === k ? 'on' : '') + '" data-act="tab" data-v="' + k + '">' + n + '</button>').join('') + '</div>';
     }
     const ids = ['pw', 'pw1', 'pw2', 'rc', 'op', 'np2'], sig = S.phase + '|' + S.view, saved = {};
     if (sig === S._sig) ids.forEach((id) => { const el = document.getElementById(id); if (el && el.value) saved[id] = el.value; });
@@ -420,9 +446,10 @@
     const b = ev.target.closest('[data-act]'); if (!b || b.tagName === 'SELECT' || b.tagName === 'INPUT') return;
     const a = b.dataset.act; S.keepScroll = false;
     try {
-      if (a === 'tab') { S.monSel = false; S.view = b.dataset.v; if (S.view === 'annee') S.y = +S.date.slice(0, 4); render(); }
+      if (a === 'tab') { S.monSel = false; S.view = b.dataset.v; if (S.view === 'annee') S.y = +S.date.slice(0, 4); if (S.view === 'compteurs') S.cy = +S.date.slice(0, 4); render(); }
       else if (a === 'settings') { S.view = 'settings'; S.err = ''; render(); }
       else if (a === 'closeSettings') { S.view = 'mois'; render(); }
+      else if (a === 'cPrev') { S.cy--; render(); } else if (a === 'cNext') { S.cy++; render(); }
       else if (a === 'yPrev') { S.y--; render(); } else if (a === 'yNext') { S.y++; render(); }
       else if (a === 'mPrev') { S.monSel = false; S.m--; if (S.m < 1) { S.m = 12; S.y--; } render(); }
       else if (a === 'mNext') { S.monSel = false; S.m++; if (S.m > 12) { S.m = 1; S.y++; } render(); }
