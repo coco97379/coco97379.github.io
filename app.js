@@ -10,7 +10,7 @@
     C: { c: '#1D4ED8', n: 'Congé / permission' }, P: { c: '#B45309', n: 'Permanence' }, R: { c: '#15803D', n: 'Repos hebdomadaire' },
     RPC: { c: '#0E7490', n: 'Repos physiologique compensatoire' }, RR: { c: '#7E22CE', n: 'Repos récupérateur' }, F: { c: '#BE185D', n: 'Formation' }
   };
-  const CHIPS = [['', 'Service'], ['P', 'Permanence'], ['R', 'Repos'], ['RPC', 'RPC'], ['RR', 'RR'], ['F', 'Formation'], ['C', 'Congé / permission']];
+  const CHIPS = [['P', 'Permanence'], ['R', 'Repos'], ['RPC', 'RPC'], ['RR', 'RR'], ['F', 'Formation'], ['C', 'Congé / permission']];
   const TYPES = ['Audition témoin', 'Audition victime', 'Visio', 'GAV', 'Autre'];
   const MOIS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
   const MOIS3 = ['JAN', 'FÉV', 'MAR', 'AVR', 'MAI', 'JUN', 'JUL', 'AOÛ', 'SEP', 'OCT', 'NOV', 'DÉC'];
@@ -132,7 +132,7 @@
   /* ---------- Verrouillage ---------- */
   let lockTimer;
   function touch() { clearTimeout(lockTimer); if (S.dk) lockTimer = setTimeout(lock, LOCK_MS); }
-  function lock() { S.dk = null; S.entries = new Map(); S.form = null; S.view = 'mois'; S.phase = 'unlock'; S.err = ''; render(); }
+  function lock() { S.dk = null; S.entries = new Map(); S.form = null; S.per = null; S.view = 'mois'; S.phase = 'unlock'; S.err = ''; render(); }
   let hiddenAt = 0;
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) hiddenAt = Date.now();
@@ -220,12 +220,13 @@
       '<div class="sec"><div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b style="font-size:15px">' + fmtLong(sel) + '</b>' +
       (code ? '<span style="font-size:11px;font-weight:700;color:#fff;background:' + CATS[code].c + ';border-radius:999px;padding:3px 10px">' + esc(CATS[code].n) + '</span>' : '') + '</div>' +
       (hh ? '<div style="font-size:13px;color:#713F12">Jour férié : ' + esc(hh.nom) + '</div>' : '') + (list || '<div style="font-size:13px;color:#4B5563">Rien de noté.</div>') +
-      '<button data-act="goDay" data-date="' + sel + '" style="text-align:left;font-size:13px;font-weight:600;color:#1D4ED8;min-height:32px">Ouvrir le détail du jour →</button></div></div>';
+      '<button data-act="goDay" data-date="' + sel + '" style="text-align:left;font-size:13px;font-weight:600;color:#1D4ED8;min-height:32px">Ouvrir le détail du jour →</button>' +
+      '<button data-act="openPer" style="text-align:left;font-size:13px;font-weight:600;color:#1D4ED8;min-height:32px">📅 Saisir sur plusieurs jours…</button></div></div>';
   }
 
   function viewDay() {
     const date = S.date, [y, m, d] = date.split('-').map(Number), code = statutOf(date), hh = holidays(y)[date];
-    const chips = CHIPS.map(([k, n]) => { const on = (code || '') === k && (k || !code); return '<button class="chip' + (on ? ' on' : '') + '" style="' + (on ? 'background:' + (k ? CATS[k].c : '#111827') : '') + '" data-act="statut" data-code="' + k + '">' + n + '</button>'; }).join('');
+    const chips = CHIPS.map(([k, n]) => { const on = code === k; return '<button class="chip' + (on ? ' on' : '') + '" style="' + (on ? 'background:' + CATS[k].c : '') + '" data-act="statut" data-code="' + k + '">' + n + '</button>'; }).join('');
     const items = dayEntries(date, ['activite', 'rdv']).map((e) => {
       const una = [e.cu, e.np, e.an].filter(Boolean).join('/');
       const sub = e.kind === 'rdv' ? [e.nom, una ? 'UNA ' + una : ''].filter(Boolean).join(' · ') : '';
@@ -236,7 +237,8 @@
     return '<div class="top" style="padding-bottom:0"><button data-act="backMonth" style="height:44px;font-size:14px;font-weight:600;color:#1D4ED8">‹ ' + MOIS[m - 1] + ' ' + y + '</button><div style="display:flex;align-items:center;gap:2px">' + pill() + gear + '</div></div>' +
       '<div class="sec" style="padding-top:0"><div class="title">' + fmtLong(date) + '</div><div style="font-size:12px;color:#4B5563">Semaine ' + isoWeek(y, m, d) + '</div></div>' +
       (hh ? '<div class="banner">Jour férié : ' + esc(hh.nom) + '</div>' : '') +
-      '<div class="sec"><div class="lab">STATUT DU JOUR</div><div class="chips">' + chips + '</div></div>' +
+      '<div class="sec"><div class="lab">STATUT DU JOUR</div><div class="chips">' + chips + '</div>' +
+      '<div class="row2" style="margin-top:10px">' + (code ? '<button class="btn" data-act="statut" data-code="">✕ Effacer le statut</button>' : '') + '<button class="btn" data-act="openPer">📅 Plusieurs jours…</button></div></div>' +
       '<div class="sec"><div class="lab">ACTIVITÉ ET RENDEZ-VOUS</div>' + items + '<div class="sp"></div>' +
       '<div class="row2"><button class="btn" data-act="newRdv">+ Rendez-vous</button><button class="btn" data-act="newAct">+ Activité</button></div></div>' +
       '<div class="sec"><div class="lab">NOTES</div><textarea class="inp" id="note" placeholder="Écrire ici…">' + esc(noteTxt) + '</textarea></div>';
@@ -246,6 +248,39 @@
     const fy = new Date(Date.UTC(dt.getUTCFullYear(), 0, 4)); return 1 + Math.round(((dt - fy) / 86400000 - 3 + ((fy.getUTCDay() + 6) % 7)) / 7);
   }
 
+  const perDays = (per) => {
+    const out = []; if (!per.from || !per.to || per.to < per.from) return out;
+    let t = Date.parse(per.from + 'T00:00:00Z'); const end = Date.parse(per.to + 'T00:00:00Z');
+    for (; t <= end && out.length < 400; t += 86400000) {
+      const d = new Date(t), iso = AG.iso(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+      if (per.skipWe && AG.dow(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate()) >= 5) continue;
+      out.push(iso);
+    }
+    return out;
+  };
+  function viewPer() {
+    const P = S.per, days = perDays(P), erase = P.code === '-';
+    const chips = CHIPS.map(([k, n]) => '<button class="chip' + (P.code === k ? ' on' : '') + '" style="' + (P.code === k ? 'background:' + CATS[k].c : '') + '" data-act="perCode" data-code="' + k + '">' + n + '</button>').join('') +
+      '<button class="chip' + (erase ? ' on' : '') + '" style="' + (erase ? 'background:#111827' : '') + '" data-act="perCode" data-code="-">✕ Effacer</button>';
+    const msg = P.to < P.from ? 'La date de fin est avant la date de début.' : !P.code ? 'Choisis un statut.' : days.length + ' jour' + (days.length > 1 ? 's' : '') + (erase ? ' à effacer' : ' à enregistrer') + (days.length >= 400 ? ' (maximum)' : '') + '.';
+    const ok = P.code && days.length > 0 && P.to >= P.from;
+    return '<div class="top" style="padding-bottom:0"><button data-act="cancelPer" style="height:44px;font-size:14px;font-weight:600;color:#1D4ED8">‹ Retour</button><div>' + pill() + '</div></div>' +
+      '<div class="sec" style="padding-top:0"><div class="title">Saisir sur plusieurs jours</div></div>' +
+      '<div class="sec"><div class="lab">STATUT</div><div class="chips">' + chips + '</div></div>' +
+      '<div class="sec"><div class="row2"><div class="field"><label for="p-from">Du</label><input class="inp" type="date" id="p-from" data-p="from" value="' + P.from + '"></div>' +
+      '<div class="field"><label for="p-to">Au (inclus)</label><input class="inp" type="date" id="p-to" data-p="to" value="' + P.to + '"></div></div>' +
+      '<label style="display:flex;align-items:center;gap:10px;font-size:14px;margin:6px 0 12px;min-height:44px"><input type="checkbox" data-act="perWe" ' + (P.skipWe ? 'checked' : '') + ' style="width:22px;height:22px"> Ne pas toucher les samedis et dimanches</label>' +
+      '<div class="card" style="padding:12px 16px;font-size:14px;margin-bottom:12px">' + msg + '</div>' +
+      '<div class="row2"><button class="btn" data-act="cancelPer">Annuler</button><button class="btn pri" data-act="applyPer" style="flex:1.4;' + (ok ? '' : 'opacity:.4') + '">' + (erase ? 'Effacer' : 'Appliquer') + '</button></div></div>';
+  }
+  async function applyPer() {
+    const P = S.per, days = perDays(P);
+    if (!P.code || !days.length) return;
+    const code = P.code === '-' ? '' : P.code;
+    for (const d of days) await setStatut(d, code);
+    S.date = P.from; S.y = +P.from.slice(0, 4); S.m = +P.from.slice(5, 7); S.view = S.perBack || 'mois'; S.per = null;
+    toast(days.length + ' jour' + (days.length > 1 ? 's' : '') + (code ? ' enregistré' : ' effacé') + (days.length > 1 ? 's' : '') + '.');
+  }
   function viewForm() {
     const f = S.form, rdv = f.kind === 'rdv';
     const types = TYPES.map((t) => '<button class="chip' + (f.type === t ? ' on' : '') + '" style="' + (f.type === t ? 'background:#312E81' : '') + '" data-act="setType" data-type="' + t + '">' + t + '</button>').join('');
@@ -282,6 +317,7 @@
     if (S.phase !== 'app') html = viewLock();
     else if (S.view === 'form') html = '<div class="main">' + viewForm() + '</div>';
     else if (S.view === 'settings') html = '<div class="main">' + viewSettings() + '</div>';
+    else if (S.view === 'periode' && S.per) html = '<div class="main">' + viewPer() + '</div>';
     else {
       const v = S.view === 'annee' ? viewYear() : S.view === 'jour' ? viewDay() : viewMonth();
       html = '<div class="main">' + v + '</div><div class="tabs">' + [['annee', 'Année'], ['mois', 'Mois'], ['jour', 'Jour']].map(([k, n]) => '<button class="' + (S.view === k ? 'on' : '') + '" data-act="tab" data-v="' + k + '">' + n + '</button>').join('') + '</div>';
@@ -330,6 +366,8 @@
     const el = ev.target, a = el.dataset && el.dataset.act;
     if (a === 'terr') { S.territoire = el.value; await kvSet('territoire', el.value); render(); }
     if (a === 'loc') { S.local = el.checked; await kvSet('local', el.checked); render(); }
+    if (el.dataset && el.dataset.p && S.per) { S.per[el.dataset.p] = el.value; if (el.dataset.p === 'from' && S.per.to < el.value) S.per.to = el.value; S.keepScroll = true; render(); }
+    if (a === 'perWe' && S.per) { S.per.skipWe = el.checked; S.keepScroll = true; render(); }
   });
   app.addEventListener('click', async (ev) => {
     const b = ev.target.closest('[data-act]'); if (!b || b.tagName === 'SELECT' || b.tagName === 'INPUT') return;
@@ -345,6 +383,10 @@
       else if (a === 'goDay') { S.date = b.dataset.date; S.y = +S.date.slice(0, 4); S.m = +S.date.slice(5, 7); S.view = 'jour'; render(); }
       else if (a === 'backMonth') { S.y = +S.date.slice(0, 4); S.m = +S.date.slice(5, 7); S.view = 'mois'; render(); }
       else if (a === 'statut') { S.keepScroll = true; await setStatut(S.date, b.dataset.code); render(); }
+      else if (a === 'openPer') { S.per = { from: S.date, to: S.date, code: '', skipWe: false }; S.perBack = S.view; S.view = 'periode'; render(); }
+      else if (a === 'perCode') { S.per.code = b.dataset.code; S.keepScroll = true; render(); }
+      else if (a === 'cancelPer') { S.view = S.perBack || 'mois'; S.per = null; render(); }
+      else if (a === 'applyPer') await applyPer();
       else if (a === 'newRdv') openForm('rdv'); else if (a === 'newAct') openForm('activite');
       else if (a === 'editEntry') openForm(S.entries.get(b.dataset.id).kind, S.entries.get(b.dataset.id));
       else if (a === 'setType') { S.form.type = b.dataset.type; S.keepScroll = true; render(); }
