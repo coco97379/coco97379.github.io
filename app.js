@@ -7,10 +7,17 @@
   const LOCK_MS = 5 * 60 * 1000;
 
   const CATS = {
-    C: { c: '#1D4ED8', n: 'Congé / permission' }, P: { c: '#B45309', n: 'Permanence' }, R: { c: '#15803D', n: 'Repos hebdomadaire' },
-    RPC: { c: '#0E7490', n: 'Repos physiologique compensatoire' }, RR: { c: '#7E22CE', n: 'Repos récupérateur' }, F: { c: '#BE185D', n: 'Formation' }
+    C: { c: '#DC2626', t: '#fff', l: 'P', s: 'P', n: 'Congé / permission' }, R: { c: '#16A34A', t: '#fff', l: 'R', s: 'R', n: 'Repos hebdomadaire' },
+    RPC: { c: '#0E7490', t: '#fff', l: 'RPC', s: 'RPC', n: 'Repos physiologique compensatoire' }, RR: { c: '#16A34A', t: '#fff', l: 'RR', s: 'RR', n: 'Repos récupérateur' },
+    F: { c: '#BFDBFE', t: '#1E3A8A', l: 'Formation', s: 'F', n: 'Formation' },
+    PAM: { c: '#1D4ED8', t: '#FF3B30', l: 'PAM', s: 'PAM', n: 'Permanence PAM' }, A: { c: '#FFFFFF', t: '#111111', l: 'Accueil', s: 'A', n: 'Accueil', w: 1 },
+    OPJ: { c: '#166534', t: '#fff', l: 'OPJ', s: 'OPJ', n: 'Permanence OPJ' }, PERM: { c: '#166534', t: '#fff', l: 'Perm', s: 'Perm', n: 'Permanence' }
   };
-  const CHIPS = [['P', 'Permanence'], ['R', 'Repos'], ['RPC', 'RPC'], ['RR', 'RR'], ['F', 'Formation'], ['C', 'Congé / permission']];
+  const PERM_TYPES = ['PAM', 'A', 'OPJ', 'PERM'];
+  const PERM_DEF = ['PAM', 'A', 'OPJ'];
+  const PRESETS = { PAM: [['7h–19h', '07:00', '19:00'], ['19h–3h', '19:00', '03:00']], A: [['Matin 7h–13h', '07:00', '13:00'], ['Après-midi 13h–19h', '13:00', '19:00']], OPJ: [], PERM: [] };
+  const parsePerms = (v) => { const a = String(v || '').split(',').map((x) => x.trim()).filter((x) => PERM_TYPES.includes(x)); return a.length ? a : PERM_DEF.slice(); };
+  const CHIPS = [['_perm', 'Permanence'], ['R', 'Repos'], ['RPC', 'RPC'], ['RR', 'RR'], ['F', 'Formation'], ['C', 'Congé / permission']];
   const TYPES = ['Audition témoin', 'Audition victime', 'Visio', 'GAV', 'Autre'];
   const MOIS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
   const MOIS3 = ['JAN', 'FÉV', 'MAR', 'AVR', 'MAI', 'JUN', 'JUL', 'AOÛ', 'SEP', 'OCT', 'NOV', 'DÉC'];
@@ -22,7 +29,7 @@
   const S = {
     phase: 'boot', view: 'mois', dk: null, meta: null, rows: new Map(), pending: new Set(), entries: new Map(),
     y: now.getFullYear(), m: now.getMonth() + 1, date: todayIso, territoire: 'Guyane', local: true,
-    sync: 'idle', syncInfo: '', form: null, toast: '', err: '', busy: false, confirmDel: false, metaDirty: false, tmp: {}
+    perms: PERM_DEF.slice(), permOpen: '', sync: 'idle', syncInfo: '', form: null, toast: '', err: '', busy: false, confirmDel: false, metaDirty: false, tmp: {}
   };
 
   /* ---------- Stockage local (IndexedDB) ---------- */
@@ -80,11 +87,10 @@
     if (window.__demoOffline) throw new Error('offline');
     opts = opts || {}; const u = decodeURIComponent(url); const body = opts.body ? JSON.parse(opts.body) : null;
     const ok = (j) => ({ ok: true, status: 200, json: async () => j || {} });
-    let m = u.match(/values\/Jours!A(\d+):O\d+/);
-    if (m && opts.method === 'PUT') { demo.rows[+m[1] - 2] = body.values[0]; return ok(); }
-    if (u.includes('/values/Jours!A2:O')) return ok({ values: demo.rows });
-    if (u.includes(':append')) { body.values.forEach((r) => demo.rows.push(r)); return ok(); }
-    if (u.includes('Réglages!A5:B10')) { body.values.forEach(([k, v]) => { demo.meta[k] = v; }); return ok(); }
+    let m = u.match(/values\/Jours!A(\d+):AF(\d+)/);
+    if (m && opts.method === 'PUT') { body.values.forEach((v, i) => { const x = v.slice(); while (x.length && x[x.length - 1] === '') x.pop(); demo.rows[+m[1] - 2 + i] = x; }); return ok(); }
+    if (u.includes('/values/Jours!A2:AF')) return ok({ values: demo.rows });
+    if (u.includes('Réglages!A5:B11')) { body.values.forEach(([k, v]) => { demo.meta[k] = v; }); return ok(); }
     if (u.includes('Réglages!A2:B12')) return ok({ values: Object.entries(demo.meta) });
     if (u.includes('Réglages!B2')) return ok({ values: [['Guyane']] });
     return { ok: false, status: 404, json: async () => ({}) };
@@ -102,6 +108,7 @@
     try {
       const a = api();
       if (S.metaDirty) { await a.setMeta(S.meta); S.metaDirty = false; await kvSet('metaDirty', false); }
+      if (!S.metaDirty) { const rm = await a.getMeta().catch(() => null); if (rm && rm.perms !== undefined && rm.perms !== ((S.meta && S.meta.perms) || '')) { S.meta = Object.assign({}, S.meta, { perms: rm.perms }); await kvSet('meta', S.meta); S.perms = parsePerms(rm.perms); } }
       const r = await AG.sync(a, S.rows, S.pending);
       await persist(); await refreshEntries();
       if (!S.tmp.terrChecked) { S.tmp.terrChecked = true; const t = await kvGet('territoire'); if (!t) { const tr = await a.getTerritoire().catch(() => ''); if (AG.TERRITOIRES.includes(tr)) { S.territoire = tr; await kvSet('territoire', tr); } } }
@@ -120,11 +127,25 @@
   }
   const dayEntries = (date, kinds) => Array.from(S.entries.values()).filter((e) => e.date === date && !e.del && kinds.includes(e.kind))
     .sort((a, b) => (a.debut || '99').localeCompare(b.debut || '99'));
-  const statutOf = (date) => { const e = S.entries.get('st-' + date); return e && !e.del ? e.statut : ''; };
-  async function setStatut(date, code) {
+  const statutOf = (date) => { const e = S.entries.get('st-' + date); const c = e && !e.del ? e.statut : ''; return c === 'P' ? 'PERM' : (CATS[c] ? c : ''); };
+  const statutEntry = (date) => { const e = S.entries.get('st-' + date); return e && !e.del ? e : null; };
+  const isPerm = (c) => PERM_TYPES.includes(c);
+  const labelOf = (date, short) => {
+    const c = statutOf(date); if (!c) { const k = dayEntries(date, ['activite', 'rdv']).map((e) => e.kind); return [k.includes('rdv') ? 'RDV' : '', k.includes('activite') ? 'AC' : ''].filter(Boolean).join(' '); }
+    if (short) return CATS[c].s;
+    if (c === 'A') { const e = statutEntry(date); const h = e && e.debut ? +e.debut.slice(0, 2) : -1; return h < 0 ? 'Accueil' : h < 13 ? 'Accueil AM' : 'Accueil PM'; }
+    const e = statutEntry(date); return CATS[c].l;
+  };
+  async function setStatut(date, code, debut, fin) {
     const old = S.entries.get('st-' + date);
     if (!code && !old) return;
-    await saveEntry({ id: 'st-' + date, date, kind: 'statut', statut: code, del: !code });
+    if (debut === undefined && isPerm(code)) { const p = (PRESETS[code] || [])[0]; debut = p ? p[1] : ''; fin = p ? p[2] : ''; }
+    await saveEntry({ id: 'st-' + date, date, kind: 'statut', statut: code, debut: debut || '', fin: fin || '', del: !code });
+  }
+  const permsOn = () => S.perms.filter((k) => PERM_TYPES.includes(k));
+  async function savePerms(arr) {
+    S.perms = arr.length ? arr : PERM_DEF.slice(); S.meta = Object.assign({}, S.meta, { perms: S.perms.join(',') });
+    S.metaDirty = true; await kvSet('meta', S.meta); await kvSet('metaDirty', true); scheduleSync(0);
   }
   const holidays = (y) => AG.holidays(y, S.territoire, S.local);
   function toast(msg) { S.toast = msg; render(); setTimeout(() => { if (S.toast === msg) { S.toast = ''; render(); } }, 4500); }
@@ -162,7 +183,12 @@
   }
   const gear = '<button class="iconbtn" data-act="settings" aria-label="Réglages"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>';
   const logo = '<div class="logo"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></div>';
-  function legend() { return '<div class="legend">' + Object.keys(CATS).map((k) => '<div class="lg"><div class="lgb" style="background:' + CATS[k].c + '">' + k + '</div>' + esc(CATS[k].n.replace('Repos physiologique compensatoire', 'Rep. physio. comp.').replace('Repos récupérateur', 'Rep. récup.').replace('Repos hebdomadaire', 'Repos').replace('Congé / permission', 'Congé/perm.')) + '</div>').join('') + '</div>'; }
+  const chipStyle = (k) => 'background:' + CATS[k].c + ';color:' + CATS[k].t + (CATS[k].w ? ';box-shadow:inset 0 0 0 1px #9CA3AF' : '');
+  function legend() {
+    const ks = Object.keys(CATS).filter((k) => !isPerm(k) || permsOn().includes(k));
+    return '<div class="legend">' + ks.map((k) => '<div class="lg"><div class="lgb" style="' + chipStyle(k) + '">' + esc(CATS[k].s) + '</div>' + esc(CATS[k].n.replace('Repos physiologique compensatoire', 'Rep. physio. comp.').replace('Repos récupérateur', 'Rep. récup.').replace('Repos hebdomadaire', 'Repos').replace('Congé / permission', 'Congé/perm.')) + '</div>').join('') +
+      '<div class="lg"><div class="lgb" style="background:#fff;color:#111;box-shadow:inset 0 0 0 1px #9CA3AF">RDV</div>Rendez-vous</div><div class="lg"><div class="lgb" style="background:#fff;color:#111;box-shadow:inset 0 0 0 1px #9CA3AF">AC</div>Activité</div></div>';
+  }
   const fmtLong = (iso) => { const [y, m, d] = iso.split('-').map(Number); return JOURS[AG.dow(y, m, d)] + ' ' + d + ' ' + MOIS[m - 1].toLowerCase(); };
 
   function viewLock() {
@@ -184,7 +210,7 @@
       '<p style="font-size:12px;margin-top:10px">Se reverrouille après 5 minutes d\'inactivité.</p>' + (S.pending.size ? '<div>' + pill() + '</div>' : '') + '</div>';
   }
 
-  function cellStyle(code) { return code ? 'background:' + CATS[code].c + ';' : ''; }
+  function cellStyle(code) { return code ? 'background:' + CATS[code].c + ';color:' + CATS[code].t + ';' : ''; }
 
   function viewYear() {
     const y = S.y, hol = holidays(y); let rows = '';
@@ -194,7 +220,7 @@
       for (let d = 1; d <= 31; d++) {
         if (d > AG.daysIn(y, m)) { rows += '<div class="yc none"></div>'; continue; }
         const iso = AG.iso(y, m, d), code = statutOf(iso), h = hol[iso], we = AG.dow(y, m, d) >= 5;
-        rows += '<button class="yc' + (code ? ' cat' : we ? ' we' : '') + (iso === todayIso ? ' sel' : '') + (code && code.length > 1 ? ' long' : '') + '" style="' + cellStyle(code) + '" data-act="goDay" data-date="' + iso + '" aria-label="' + fmtLong(iso) + (code ? ', ' + CATS[code].n : '') + (h ? ', ' + esc(h.nom) : '') + '">' + (code || '') + (h ? '<i class="dot' + (h.legal ? '' : ' loc') + '"></i>' : '') + '</button>';
+        rows += '<button class="yc' + (code ? ' cat' : we ? ' we' : '') + (iso === todayIso ? ' sel' : '') + (code && CATS[code].s.length > 1 ? ' long' : '') + '" style="' + cellStyle(code) + '" data-act="goDay" data-date="' + iso + '" aria-label="' + fmtLong(iso) + (code ? ', ' + CATS[code].n : '') + (h ? ', ' + esc(h.nom) : '') + '">' + (code ? CATS[code].s : labelOf(iso, 1).replace('RDV AC', '•').replace('RDV', 'R').replace('AC', 'a')) + (h ? '<i class="dot' + (h.legal ? '' : ' loc') + '"></i>' : '') + '</button>';
       }
     }
     return '<div class="top"><div class="title">' + y + '</div>' + pill() + '<div style="display:flex;align-items:center;gap:2px">' +
@@ -209,7 +235,7 @@
     for (let i = 0; i < first; i++) cells += '<div></div>';
     for (let d = 1; d <= n; d++) {
       const iso = AG.iso(y, m, d), code = statutOf(iso), h = hol[iso], we = AG.dow(y, m, d) >= 5;
-      cells += '<button class="mc' + (code ? ' cat' : we ? ' we' : '') + (iso === S.date ? ' sel' : '') + '" style="' + cellStyle(code) + '" data-act="pickDay" data-date="' + iso + '" aria-label="' + fmtLong(iso) + '"><b>' + d + '</b><span>' + (code || '') + '</span>' +
+      cells += '<button class="mc' + (code ? ' cat' : we ? ' we' : '') + (iso === S.date ? ' sel' : '') + '" style="' + cellStyle(code) + '" data-act="pickDay" data-date="' + iso + '" aria-label="' + fmtLong(iso) + '"><b>' + d + '</b><span class="' + (labelOf(iso).length > 4 ? 'lbl' : '') + '">' + esc(labelOf(iso)) + '</span>' +
         (h ? '<i class="dot' + (h.legal ? '' : ' loc') + '"></i>' : '') + '</button>';
     }
     const sel = S.date, hh = (holidays(+sel.slice(0, 4)) || {})[sel], code = statutOf(sel);
@@ -217,16 +243,33 @@
     return '<div class="top"><div class="title">' + MOIS[m - 1] + ' ' + y + '</div>' + pill() + '<div style="display:flex;align-items:center;gap:2px">' +
       '<button class="iconbtn" data-act="mPrev" aria-label="Mois précédent">‹</button><button class="iconbtn" data-act="mNext" aria-label="Mois suivant">›</button>' + gear + '</div></div>' +
       '<div class="wk">' + 'LMMJVSD'.split('').map((x) => '<div>' + x + '</div>').join('') + '</div><div class="m7">' + cells + '</div>' + legend() +
-      '<div class="sec"><div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b style="font-size:15px">' + fmtLong(sel) + '</b>' +
-      (code ? '<span style="font-size:11px;font-weight:700;color:#fff;background:' + CATS[code].c + ';border-radius:999px;padding:3px 10px">' + esc(CATS[code].n) + '</span>' : '') + '</div>' +
+      (S.monSel ? '<div class="sec"><div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b style="font-size:15px">' + fmtLong(sel) + '</b>' +
+      (code ? '<span style="font-size:11px;font-weight:700;' + chipStyle(code) + ';border-radius:999px;padding:3px 10px">' + esc(CATS[code].n) + (statutEntry(sel) && statutEntry(sel).debut ? ' ' + esc(statutEntry(sel).debut) + '–' + esc(statutEntry(sel).fin) : '') + '</span>' : '') + '</div>' +
       (hh ? '<div style="font-size:13px;color:#713F12">Jour férié : ' + esc(hh.nom) + '</div>' : '') + (list || '<div style="font-size:13px;color:#4B5563">Rien de noté.</div>') +
       '<button data-act="goDay" data-date="' + sel + '" style="text-align:left;font-size:13px;font-weight:600;color:#1D4ED8;min-height:32px">Ouvrir le détail du jour →</button>' +
-      '<button data-act="openPer" style="text-align:left;font-size:13px;font-weight:600;color:#1D4ED8;min-height:32px">📅 Saisir sur plusieurs jours…</button></div></div>';
+      '<div class="lab" style="margin:4px 0 0">STATUT</div>' + statusUI(sel) + '</div></div>' : '');
+  }
+
+  function statusUI(date) {
+    const code = statutOf(date);
+    const po = permsOn(), perm = isPerm(code), open = perm || S.permOpen === date;
+    const chips = CHIPS.map(([k, n]) => { const on = k === '_perm' ? open : code === k; return '<button class="chip' + (on ? ' on' : '') + '" style="' + (on ? (k === '_perm' ? 'background:#111827;color:#fff' : chipStyle(k)) : '') + '" data-act="statut" data-code="' + k + '">' + n + '</button>'; }).join('');
+    const se = statutEntry(date);
+    let panel = '';
+    if (open) {
+      if (po.length > 1) panel += '<div class="permbox">' + po.map((k) => '<label class="pc"><input type="checkbox" data-act="permType" data-code="' + k + '"' + (code === k ? ' checked' : '') + '><span>' + esc(CATS[k].n) + '</span><i class="pb" style="' + chipStyle(k) + '">' + esc(CATS[k].s) + '</i></label>').join('') + '</div>';
+      if (perm) {
+        const pr = PRESETS[code] || [];
+        panel += '<div class="permbox"><div class="lab" style="margin:0 0 6px">HORAIRE</div><div class="row2"><div class="field"><label for="h-d">De</label><input class="inp" type="time" id="h-d" data-h="debut" value="' + esc(se ? se.debut : '') + '"></div><div class="field"><label for="h-f">À</label><input class="inp" type="time" id="h-f" data-h="fin" value="' + esc(se ? se.fin : '') + '"></div></div>' +
+          (pr.length ? '<div class="chips" style="margin-top:6px">' + pr.map((p, i) => '<button class="chip" style="height:36px;font-size:13px" data-act="preset" data-i="' + i + '">' + p[0] + '</button>').join('') + '</div>' : '') + '</div>';
+      }
+    }
+    return '<div class="chips">' + chips + '</div>' + panel +
+      '<div class="row2" style="margin-top:10px">' + (code ? '<button class="btn" data-act="statut" data-code="">✕ Effacer le statut</button>' : '') + '<button class="btn" data-act="openPer">📅 Plusieurs jours…</button></div>';
   }
 
   function viewDay() {
     const date = S.date, [y, m, d] = date.split('-').map(Number), code = statutOf(date), hh = holidays(y)[date];
-    const chips = CHIPS.map(([k, n]) => { const on = code === k; return '<button class="chip' + (on ? ' on' : '') + '" style="' + (on ? 'background:' + CATS[k].c : '') + '" data-act="statut" data-code="' + k + '">' + n + '</button>'; }).join('');
     const items = dayEntries(date, ['activite', 'rdv']).map((e) => {
       const una = [e.cu, e.np, e.an].filter(Boolean).join('/');
       const sub = e.kind === 'rdv' ? [e.nom, una ? 'UNA ' + una : ''].filter(Boolean).join(' · ') : '';
@@ -237,8 +280,7 @@
     return '<div class="top" style="padding-bottom:0"><button data-act="backMonth" style="height:44px;font-size:14px;font-weight:600;color:#1D4ED8">‹ ' + MOIS[m - 1] + ' ' + y + '</button><div style="display:flex;align-items:center;gap:2px">' + pill() + gear + '</div></div>' +
       '<div class="sec" style="padding-top:0"><div class="title">' + fmtLong(date) + '</div><div style="font-size:12px;color:#4B5563">Semaine ' + isoWeek(y, m, d) + '</div></div>' +
       (hh ? '<div class="banner">Jour férié : ' + esc(hh.nom) + '</div>' : '') +
-      '<div class="sec"><div class="lab">STATUT DU JOUR</div><div class="chips">' + chips + '</div>' +
-      '<div class="row2" style="margin-top:10px">' + (code ? '<button class="btn" data-act="statut" data-code="">✕ Effacer le statut</button>' : '') + '<button class="btn" data-act="openPer">📅 Plusieurs jours…</button></div></div>' +
+      '<div class="sec"><div class="lab">STATUT DU JOUR</div>' + statusUI(date) + '</div>' +
       '<div class="sec"><div class="lab">ACTIVITÉ ET RENDEZ-VOUS</div>' + items + '<div class="sp"></div>' +
       '<div class="row2"><button class="btn" data-act="newRdv">+ Rendez-vous</button><button class="btn" data-act="newAct">+ Activité</button></div></div>' +
       '<div class="sec"><div class="lab">NOTES</div><textarea class="inp" id="note" placeholder="Écrire ici…">' + esc(noteTxt) + '</textarea></div>';
@@ -260,7 +302,7 @@
   };
   function viewPer() {
     const P = S.per, days = perDays(P), erase = P.code === '-';
-    const chips = CHIPS.map(([k, n]) => '<button class="chip' + (P.code === k ? ' on' : '') + '" style="' + (P.code === k ? 'background:' + CATS[k].c : '') + '" data-act="perCode" data-code="' + k + '">' + n + '</button>').join('') +
+    const chips = permsOn().map((k) => [k, CATS[k].n]).concat(CHIPS.slice(1)).map(([k, n]) => '<button class="chip' + (P.code === k ? ' on' : '') + '" style="' + (P.code === k ? chipStyle(k) : '') + '" data-act="perCode" data-code="' + k + '">' + n + '</button>').join('') +
       '<button class="chip' + (erase ? ' on' : '') + '" style="' + (erase ? 'background:#111827' : '') + '" data-act="perCode" data-code="-">✕ Effacer</button>';
     const msg = P.to < P.from ? 'La date de fin est avant la date de début.' : !P.code ? 'Choisis un statut.' : days.length + ' jour' + (days.length > 1 ? 's' : '') + (erase ? ' à effacer' : ' à enregistrer') + (days.length >= 400 ? ' (maximum)' : '') + '.';
     const ok = P.code && days.length > 0 && P.to >= P.from;
@@ -304,6 +346,8 @@
       '<div class="sec" style="padding-top:0"><div class="title">Réglages</div></div>' +
       '<div class="set"><h3>JOURS FÉRIÉS</h3><div class="field"><label for="terr">Territoire</label><select class="inp" id="terr" data-act="terr">' + AG.TERRITOIRES.map((t) => '<option' + (t === S.territoire ? ' selected' : '') + '>' + t + '</option>').join('') + '</select></div>' +
       '<label style="font-size:13px;display:flex;gap:8px;align-items:center"><input type="checkbox" id="loc" data-act="loc"' + (S.local ? ' checked' : '') + '> Montrer les usages locaux (jours gras en Guyane)</label></div>' +
+      '<div class="set"><h3>TYPES DE PERMANENCE</h3><div style="font-size:13px;color:#4B5563;margin-bottom:8px">Coche ceux que tu veux voir. Un seul coché : le bouton Permanence s\'applique directement.</div>' +
+      PERM_TYPES.map((k) => '<label class="pc"><input type="checkbox" data-act="permSet" data-code="' + k + '"' + (permsOn().includes(k) ? ' checked' : '') + '><span>' + esc(k === 'PERM' ? 'Permanence simple (Perm)' : CATS[k].n) + '</span><i class="pb" style="' + chipStyle(k) + '">' + esc(CATS[k].s) + '</i></label>').join('') + '</div>' +
       '<div class="set"><h3>SYNCHRONISATION</h3><div style="font-size:13px;color:#4B5563;margin-bottom:10px">' + (n ? n + ' modification(s) en attente d\'envoi.' : 'Tout est envoyé dans le Sheet.') + '</div>' +
       '<div class="row2"><button class="btn" data-act="syncNow">Synchroniser</button><button class="btn" data-act="reauth">Connexion Google</button></div></div>' +
       '<div class="set"><h3>MOT DE PASSE</h3><div class="field"><input class="inp" id="op" type="password" placeholder="Mot de passe actuel" autocomplete="current-password"></div><div class="field"><input class="inp" id="np2" type="password" placeholder="Nouveau mot de passe (10 caractères minimum)" autocomplete="new-password"></div>' +
@@ -367,22 +411,31 @@
     if (a === 'terr') { S.territoire = el.value; await kvSet('territoire', el.value); render(); }
     if (a === 'loc') { S.local = el.checked; await kvSet('local', el.checked); render(); }
     if (el.dataset && el.dataset.p && S.per) { S.per[el.dataset.p] = el.value; if (el.dataset.p === 'from' && S.per.to < el.value) S.per.to = el.value; S.keepScroll = true; render(); }
+    if (a === 'permType') { const k = el.dataset.code; S.keepScroll = true; if (el.checked) await setStatut(S.date, k); else await setStatut(S.date, ''); S.permOpen = S.date; render(); }
+    if (a === 'permSet') { const k = el.dataset.code, cur = permsOn(); await savePerms(el.checked ? PERM_TYPES.filter((x) => cur.includes(x) || x === k) : cur.filter((x) => x !== k)); S.keepScroll = true; render(); }
+    if (el.dataset && el.dataset.h) { const e = statutEntry(S.date); if (e) { const n = Object.assign({}, e); n[el.dataset.h] = el.value; await saveEntry(n); S.keepScroll = true; render(); } }
     if (a === 'perWe' && S.per) { S.per.skipWe = el.checked; S.keepScroll = true; render(); }
   });
   app.addEventListener('click', async (ev) => {
     const b = ev.target.closest('[data-act]'); if (!b || b.tagName === 'SELECT' || b.tagName === 'INPUT') return;
     const a = b.dataset.act; S.keepScroll = false;
     try {
-      if (a === 'tab') { S.view = b.dataset.v; if (S.view === 'annee') S.y = +S.date.slice(0, 4); render(); }
+      if (a === 'tab') { S.monSel = false; S.view = b.dataset.v; if (S.view === 'annee') S.y = +S.date.slice(0, 4); render(); }
       else if (a === 'settings') { S.view = 'settings'; S.err = ''; render(); }
       else if (a === 'closeSettings') { S.view = 'mois'; render(); }
       else if (a === 'yPrev') { S.y--; render(); } else if (a === 'yNext') { S.y++; render(); }
-      else if (a === 'mPrev') { S.m--; if (S.m < 1) { S.m = 12; S.y--; } render(); }
-      else if (a === 'mNext') { S.m++; if (S.m > 12) { S.m = 1; S.y++; } render(); }
-      else if (a === 'pickDay') { S.date = b.dataset.date; S.keepScroll = true; render(); }
+      else if (a === 'mPrev') { S.monSel = false; S.m--; if (S.m < 1) { S.m = 12; S.y--; } render(); }
+      else if (a === 'mNext') { S.monSel = false; S.m++; if (S.m > 12) { S.m = 1; S.y++; } render(); }
+      else if (a === 'pickDay') { const same = S.monSel && S.date === b.dataset.date; S.date = b.dataset.date; S.monSel = !same; S.permOpen = ''; S.keepScroll = true; render(); }
       else if (a === 'goDay') { S.date = b.dataset.date; S.y = +S.date.slice(0, 4); S.m = +S.date.slice(5, 7); S.view = 'jour'; render(); }
-      else if (a === 'backMonth') { S.y = +S.date.slice(0, 4); S.m = +S.date.slice(5, 7); S.view = 'mois'; render(); }
-      else if (a === 'statut') { S.keepScroll = true; await setStatut(S.date, b.dataset.code); render(); }
+      else if (a === 'backMonth') { S.monSel = false; S.y = +S.date.slice(0, 4); S.m = +S.date.slice(5, 7); S.view = 'mois'; render(); }
+      else if (a === 'statut') {
+        S.keepScroll = true; const c = b.dataset.code;
+        if (c === '_perm') { const po = permsOn(); if (po.length === 1 && !isPerm(statutOf(S.date))) await setStatut(S.date, po[0]); else S.permOpen = S.date; }
+        else { S.permOpen = ''; await setStatut(S.date, c); }
+        render();
+      }
+      else if (a === 'preset') { const e = statutEntry(S.date), p = (PRESETS[e && e.statut] || [])[+b.dataset.i]; if (e && p) { S.keepScroll = true; await saveEntry(Object.assign({}, e, { debut: p[1], fin: p[2] })); render(); } }
       else if (a === 'openPer') { S.per = { from: S.date, to: S.date, code: '', skipWe: false }; S.perBack = S.view; S.view = 'periode'; render(); }
       else if (a === 'perCode') { S.per.code = b.dataset.code; S.keepScroll = true; render(); }
       else if (a === 'cancelPer') { S.view = S.perBack || 'mois'; S.per = null; render(); }
@@ -441,7 +494,7 @@
     const jobs = [];
     const st = (date, c) => jobs.push(saveEntry({ id: 'st-' + date, date, kind: 'statut', statut: c }));
     const mk = (a, b, c, y, m) => { for (let d = a; d <= b; d++) st(AG.iso(y, m, d), c); };
-    mk(6, 7, 'P', 2027, 3); mk(8, 8, 'RR', 2027, 3); mk(10, 10, 'R', 2027, 3); mk(15, 16, 'C', 2027, 3); mk(22, 22, 'RPC', 2027, 3); mk(23, 25, 'F', 2027, 3); mk(27, 28, 'P', 2027, 3); mk(29, 29, 'RR', 2027, 3);
+    mk(6, 6, 'PAM', 2027, 3); mk(7, 7, 'A', 2027, 3); mk(8, 8, 'RR', 2027, 3); mk(10, 10, 'R', 2027, 3); mk(15, 16, 'C', 2027, 3); mk(22, 22, 'RPC', 2027, 3); mk(23, 25, 'F', 2027, 3); mk(27, 27, 'OPJ', 2027, 3); mk(28, 28, 'PERM', 2027, 3); mk(29, 29, 'RR', 2027, 3);
     mk(15, 26, 'C', 2027, 2); mk(2, 20, 'C', 2027, 8); mk(20, 31, 'C', 2027, 12);
     jobs.push(saveEntry({ id: 'rv-demo1', date: '2027-03-06', kind: 'rdv', type: 'Audition témoin', debut: '14:00', fin: '15:00', nom: 'NOM Prénom', cu: '000', np: '00000', an: '2027', detail: '' }));
     jobs.push(saveEntry({ id: 'ac-demo1', date: '2027-03-06', kind: 'activite', debut: '08:00', fin: '09:00', detail: 'Prise de permanence' }));
@@ -456,7 +509,7 @@
     DB = await openDb();
     const rows = await P(store('rows', 'readonly').getAll()); rows.forEach((r) => S.rows.set(r.id, r.row));
     (await kvGet('pending') || []).forEach((id) => S.pending.add(id));
-    S.meta = await kvGet('meta'); S.metaDirty = !!(await kvGet('metaDirty'));
+    S.meta = await kvGet('meta'); S.metaDirty = !!(await kvGet('metaDirty')); S.perms = parsePerms(S.meta && S.meta.perms);
     S.territoire = (await kvGet('territoire')) || 'Guyane'; const loc = await kvGet('local'); S.local = loc === undefined ? true : !!loc;
     if (Q.get('date')) { S.date = Q.get('date'); S.y = +S.date.slice(0, 4); S.m = +S.date.slice(5, 7); }
     if (Q.get('view')) S.view = Q.get('view');

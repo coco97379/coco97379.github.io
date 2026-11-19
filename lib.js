@@ -183,18 +183,28 @@
       return res.json();
     }
     return {
+      /* Lit A2:AF et recale chaque ligne sur son identifiant (st-, no-, ac-, rv-) :
+         répare les lignes décalées par une ancienne version. rows.mis = indices recalés. */
       async getRows() {
-        const j = await call('/values/' + encodeURIComponent('Jours!A2:O') + '?valueRenderOption=FORMATTED_VALUE');
-        return (j.values || []).map(padRow);
+        const j = await call('/values/' + encodeURIComponent('Jours!A2:AF') + '?valueRenderOption=FORMATTED_VALUE');
+        const rows = [], mis = new Set();
+        (j.values || []).forEach((raw, i) => {
+          let k = raw.findIndex((x) => /^(st|no|ac|rv)-/.test(String(x)));
+          if (k < 0) { rows.push(padRow(raw.slice(0, AG.COLS))); return; }
+          if (k > 0) mis.add(i);
+          rows.push(padRow(raw.slice(k, k + AG.COLS)));
+        });
+        rows.mis = mis; return rows;
       },
-      async updateRow(n, row) {
-        await call('/values/' + encodeURIComponent('Jours!A' + n + ':O' + n) + '?valueInputOption=RAW',
-          { method: 'PUT', body: JSON.stringify({ values: [row] }) });
+      /* Écrit toujours dans A:AF à partir d'une ligne explicite (jamais « append »). */
+      async writeRows(start, rows) {
+        const w = (r) => { const x = padRow(r); while (x.length < 32) x.push(''); return x; };
+        const end = start + rows.length - 1;
+        await call('/values/' + encodeURIComponent('Jours!A' + start + ':AF' + end) + '?valueInputOption=RAW',
+          { method: 'PUT', body: JSON.stringify({ values: rows.map(w) }) });
       },
-      async appendRows(rows) {
-        await call('/values/' + encodeURIComponent('Jours!A:O') + ':append?valueInputOption=RAW&insertDataOption=OVERWRITE',
-          { method: 'POST', body: JSON.stringify({ values: rows }) });
-      },
+      async updateRow(n, row) { await this.writeRows(n, [row]); },
+      async clearRow(n) { await this.writeRows(n, [new Array(32).fill('')]); },
       async getMeta() {
         const j = await call('/values/' + encodeURIComponent('Réglages!A2:B12') + '?valueRenderOption=FORMATTED_VALUE');
         const m = {};
@@ -202,8 +212,8 @@
         return m;
       },
       async setMeta(meta) {
-        const keys = ['version', 'salt', 'wrapPw', 'saltRec', 'wrapRec', 'iter'];
-        await call('/values/' + encodeURIComponent('Réglages!A5:B10') + '?valueInputOption=RAW',
+        const keys = ['version', 'salt', 'wrapPw', 'saltRec', 'wrapRec', 'iter', 'perms'];
+        await call('/values/' + encodeURIComponent('Réglages!A5:B11') + '?valueInputOption=RAW',
           { method: 'PUT', body: JSON.stringify({ values: keys.map((k) => [k, meta[k] || '']) }) });
       },
       async getTerritoire() {
@@ -219,8 +229,16 @@
   AG.sync = async function (api, local, pending) {
     const result = { pushed: 0, pulled: 0, conflicts: 0 };
     const remoteRows = await api.getRows();
-    const remote = new Map();
-    remoteRows.forEach((r, i) => { if (r[0]) remote.set(String(r[0]), { n: i + 2, row: r }); });
+    const mis = remoteRows.mis || new Set();
+    const remote = new Map(), junk = [];
+    remoteRows.forEach((r, i) => {
+      if (!r[0]) return;
+      const id = String(r[0]), n = i + 2, prev = remote.get(id);
+      if (!prev) { remote.set(id, { n, row: r, mis: mis.has(i) }); return; }
+      if (Number(r[12]) >= Number(prev.row[12])) { junk.push(prev.n); remote.set(id, { n, row: r, mis: mis.has(i) }); } else junk.push(n);
+    });
+    for (const n of junk) await api.clearRow(n);              // doublons vidés
+    for (const rem of remote.values()) if (rem.mis) await api.updateRow(rem.n, rem.row); // lignes décalées remises en place
     const toAppend = [];
     for (const id of Array.from(pending)) {
       const row = local.get(id);
@@ -233,7 +251,7 @@
       } else { toAppend.push(id); }
     }
     if (toAppend.length) {
-      await api.appendRows(toAppend.map((id) => padRow(local.get(id))));
+      await api.writeRows(remoteRows.length + 2, toAppend.map((id) => padRow(local.get(id))));
       toAppend.forEach((id) => pending.delete(id)); result.pushed += toAppend.length;
     }
     remote.forEach((rem, id) => {

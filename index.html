@@ -54,12 +54,13 @@ textarea.inp { height:84px; padding:10px 12px; resize:none; }
 /* mois */
 .m7 { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:4px; padding:0 16px; }
 .mc { position:relative; height:52px; border-radius:8px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; background:#fff; box-shadow:inset 0 0 0 1px var(--line); }
-.mc b { font-size:14px; font-weight:600; } .mc span { font-size:9px; font-weight:700; height:12px; }
+.mc b { font-size:14px; font-weight:600; } .mc span { font-size:9px; font-weight:700; min-height:12px; } .mc span.lbl { font-size:7px; line-height:1; text-align:center; }
+.permbox { margin-top:10px; background:#fff; border-radius:12px; box-shadow:inset 0 0 0 1px var(--line); padding:6px 14px 10px; } .pc { display:flex; align-items:center; gap:12px; min-height:46px; font-size:15px; } .pc input { width:22px; height:22px; flex:none; } .pc span { flex:1; } .pb { font-style:normal; font-size:12px; font-weight:700; border-radius:6px; padding:5px 10px; min-width:44px; text-align:center; }
 .mc.we { background:#E5E7EB; box-shadow:none; color:#374151; }
 .mc.sel { box-shadow:0 0 0 2px var(--bg), 0 0 0 4px var(--ink); }
 .dot { position:absolute; top:4px; right:4px; width:6px; height:6px; border-radius:3px; background:#111827; }
 .dot.loc { background:transparent; box-shadow:inset 0 0 0 1.5px #6B7280; }
-.cat { color:#fff !important; box-shadow:none; }
+.cat { box-shadow:none; }  .cat[style*='FFFFFF'] { box-shadow:inset 0 0 0 1px #9CA3AF; }
 .cat .dot { background:#fff; } .cat .dot.loc { background:transparent; box-shadow:inset 0 0 0 1.5px #fff; }
 .wk { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; padding:8px 16px 6px; text-align:center; font-size:11px; font-weight:600; color:var(--muted); }
 /* année */
