@@ -65,6 +65,47 @@
     return out;
   };
 
+
+  /* ---------- Jours à récupérer (fériés travaillés, Sainte-Geneviève, repos hebdomadaires non pris) ---------- */
+  const PERM_CODES = ['PAM', 'A', 'OPJ', 'PERM', 'P'];
+  AG.REC_START = '2026-11-23';
+  AG.parseIso = (iso) => { const [y, m, d] = iso.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d)); };
+  AG.mondayOf = (iso) => { const dt = AG.parseIso(iso); return AG.isoOf(AG.addDays(dt, -((dt.getUTCDay() + 6) % 7))); };
+  AG.isoWeekNo = (iso) => {
+    const dt = AG.parseIso(iso); dt.setUTCDate(dt.getUTCDate() - ((dt.getUTCDay() + 6) % 7) + 3);
+    const f = new Date(Date.UTC(dt.getUTCFullYear(), 0, 4));
+    return 1 + Math.round(((dt - f) / 86400000 - 3 + ((f.getUTCDay() + 6) % 7)) / 7);
+  };
+  /* c : { hol, st(iso)->code, act(iso)->bool, refs{idCredit:dateRR}, today, start } */
+  AG.recup = function (y, c) {
+    const out = [], start = c.start || AG.REC_START, pre = y + '-';
+    Object.keys(c.hol).sort().forEach((iso) => {
+      const h = c.hol[iso]; if (!iso.startsWith(pre) || !h.legal) return;
+      const code = c.st(iso); let how = '';
+      if (PERM_CODES.includes(code)) how = code; else if (!code && c.act(iso)) how = 'ACT';
+      if (how) out.push({ id: 'F:' + iso, g: 'F', iso, nom: h.nom, how });
+    });
+    const gen = AG.iso(y, 1, 3); if (gen >= start) out.push({ id: 'G:' + y, g: 'G', iso: gen });
+    let mon = AG.mondayOf(AG.iso(y, 1, 1));
+    for (let guard = 0; guard < 60; guard++, mon = AG.isoOf(AG.addDays(AG.parseIso(mon), 7))) {
+      const th = AG.isoOf(AG.addDays(AG.parseIso(mon), 3));
+      if (+th.slice(0, 4) > y) break; if (+th.slice(0, 4) < y || mon < start) continue;
+      const sun = AG.isoOf(AG.addDays(AG.parseIso(mon), 6)); if (sun >= c.today) continue;
+      let any = false, conge = false, nR = 0;
+      for (let i = 0; i < 7; i++) { const code = c.st(AG.isoOf(AG.addDays(AG.parseIso(mon), i))); if (code) any = true; if (code === 'C') conge = true; if (code === 'R') nR++; }
+      if (!any || conge) continue;
+      for (let k = 1; k <= Math.max(0, 2 - nR); k++) out.push({ id: 'H:' + mon + ':' + k, g: 'H', iso: mon, k, wk: AG.isoWeekNo(mon) });
+    }
+    const have = new Set(out.map((x) => x.id));
+    Object.keys(c.refs).forEach((id) => {
+      if (have.has(id)) return; const p = id.split(':'); let yy = 0;
+      if (p[0] === 'F') yy = +p[1].slice(0, 4); else if (p[0] === 'G') yy = +p[1]; else if (p[0] === 'H') yy = +AG.isoOf(AG.addDays(AG.parseIso(p[1]), 3)).slice(0, 4);
+      if (yy === y) out.push({ id, g: p[0], iso: p[1].length > 4 ? p[1] : '', k: +p[2] || 0, orphan: true });
+    });
+    out.forEach((x) => { x.used = c.refs[x.id] || ''; });
+    return out;
+  };
+
   /* ---------- Outils base64 / aléatoire ---------- */
   const b64 = (buf) => {
     const u = new Uint8Array(buf); let s = '';

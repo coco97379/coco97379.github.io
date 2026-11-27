@@ -1,5 +1,5 @@
 // Service worker : met l'application en cache pour qu'elle s'ouvre sans réseau.
-const CACHE = 'agenda-v1.8';
+const CACHE = 'agenda-v1.9';
 const FILES = ['./', 'index.html', 'app.js', 'lib.js', 'config.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', (e) => {

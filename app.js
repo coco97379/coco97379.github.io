@@ -136,11 +136,11 @@
     if (c === 'A') { const e = statutEntry(date); const h = e && e.debut ? +e.debut.slice(0, 2) : -1; return h < 0 ? 'Accueil' : h < 13 ? 'Accueil AM' : 'Accueil PM'; }
     const e = statutEntry(date); return CATS[c].l;
   };
-  async function setStatut(date, code, debut, fin) {
+  async function setStatut(date, code, debut, fin, type) {
     const old = S.entries.get('st-' + date);
     if (!code && !old) return;
     if (debut === undefined && isPerm(code)) { const p = (PRESETS[code] || [])[0]; debut = p ? p[1] : ''; fin = p ? p[2] : ''; }
-    await saveEntry({ id: 'st-' + date, date, kind: 'statut', statut: code, debut: debut || '', fin: fin || '', del: !code });
+    await saveEntry({ id: 'st-' + date, date, kind: 'statut', statut: code, debut: debut || '', fin: fin || '', type: type || '', del: !code });
   }
   const permsOn = () => S.perms.filter((k) => PERM_TYPES.includes(k));
   async function savePerms(arr) {
@@ -245,36 +245,54 @@
     const big = (n, l, c) => '<div class="card" style="padding:12px 14px;flex:1;min-width:0"><div style="font-size:28px;font-weight:700;line-height:1.1;color:' + c + '">' + n + '</div><div style="font-size:12px;color:#4B5563;margin-top:2px">' + l + '</div></div>';
     const barsOf = (keys) => { const max = Math.max(1, ...keys.map((k) => cnt[k])); return keys.map((k) => '<div style="display:flex;align-items:center;gap:8px;min-height:30px"><div style="width:84px;font-size:12px;flex:none">' + esc(k === 'C' ? 'Congé/perm.' : k === 'A' ? 'Accueil' : k === 'PERM' ? 'Perm' : k === 'RR' ? 'RR' : k === 'R' ? 'Repos' : k === 'F' ? 'Formation' : k) + '</div>' +
       '<div style="flex:1;background:#E5E7EB;border-radius:6px;height:20px;overflow:hidden"><div style="height:100%;width:' + Math.round(cnt[k] / max * 100) + '%;background:' + (CATS[k].w ? '#6B7280' : CATS[k].t === '#FF3B30' ? CATS[k].c : CATS[k].c === '#BFDBFE' ? '#60A5FA' : CATS[k].c) + ';border-radius:6px"></div></div><div style="width:30px;text-align:right;font-weight:700;font-size:13px">' + cnt[k] + '</div></div>').join(''); };
-    const wl = worked.length ? worked.map((w) => '<div style="display:flex;gap:10px;font-size:13px;padding:5px 0;border-top:1px solid #E5E7EB"><div style="width:52px;font-weight:600;flex:none">' + w.iso.slice(8) + '/' + w.iso.slice(5, 7) + '</div><div style="flex:1">' + esc(w.nom) + '<div style="font-size:12px;color:#4B5563">' + esc(w.how) + '</div></div></div>').join('') : '<div style="font-size:13px;color:#4B5563">Aucun jour férié travaillé pour l\'instant.</div>';
+    const cr = recSorted(y), restants = cr.filter((x) => !x.used).length, pris = cr.length - restants;
+    const grp = (g, titre) => { const it = cr.filter((x) => x.g === g); if (!it.length) return ''; const r = it.filter((x) => !x.used).length;
+      return '<div style="margin-top:12px"><div style="display:flex;justify-content:space-between;font-size:13px;font-weight:600;margin-bottom:2px"><span>' + titre + '</span><span style="font-size:12px;padding:2px 8px;border-radius:10px;background:' + (r ? '#DCFCE7;color:#166534' : '#E5E7EB;color:#374151') + '">' + r + ' restant' + (r > 1 ? 's' : '') + ' sur ' + it.length + '</span></div>' +
+        it.map((x) => '<div style="display:flex;gap:10px;align-items:center;font-size:13px;padding:7px 0;border-top:1px solid #E5E7EB"><div style="flex:1">' + esc(credLabel(x)) + '<div style="font-size:12px;color:#4B5563">' + esc(credSub(x)) + '</div></div>' +
+          (x.used ? '<button style="font-size:12px;font-weight:600;color:#1D4ED8;min-height:32px" data-act="goDay" data-date="' + x.used + '">Pris le ' + dFr(x.used) + '</button>' : '<span style="font-size:12px;color:#92400E;font-weight:600">À prendre</span>') + '</div>').join('') + '</div>'; };
+    const wl = cr.length ? '<div class="kpis3" style="display:flex;gap:8px"><div style="flex:1;text-align:center"><div style="font-size:24px;font-weight:700;color:#166534">' + restants + '</div><div style="font-size:11px;color:#4B5563">à prendre</div></div><div style="flex:1;text-align:center"><div style="font-size:24px;font-weight:700">' + pris + '</div><div style="font-size:11px;color:#4B5563">pris</div></div><div style="flex:1;text-align:center"><div style="font-size:24px;font-weight:700">' + cr.length + '</div><div style="font-size:11px;color:#4B5563">acquis</div></div></div>' +
+      grp('F', 'Jours fériés travaillés') + grp('G', 'Sainte-Geneviève') + grp('H', 'Repos hebdomadaires non pris') : '<div style="font-size:13px;color:#4B5563">Rien à récupérer pour l\'instant.</div>';
     return '<div class="top"><div class="title">Compteurs ' + y + '</div>' + pill() + '<div style="display:flex;align-items:center;gap:2px"><button class="iconbtn" data-act="cPrev" aria-label="Année précédente">‹</button><button class="iconbtn" data-act="cNext" aria-label="Année suivante">›</button>' + gear + '</div></div>' +
       '<div class="sec" style="display:flex;gap:10px">' + big(cnt.C, 'jours de congé / permission', '#DC2626') + big(cnt.RR, 'repos récupérateurs', '#16A34A') + '</div>' +
       '<div class="sec" style="display:flex;gap:10px;padding-top:0">' + big(totalP, 'jours de permanence', '#1D4ED8') + big(worked.length, 'jours fériés travaillés', '#B45309') + '</div>' +
       '<div class="sec"><div class="lab">PERMANENCES PAR TYPE</div><div class="card" style="padding:10px 14px">' + barsOf(po) + '</div></div>' +
       '<div class="sec" style="padding-top:0"><div class="lab">AUTRES STATUTS</div><div class="card" style="padding:10px 14px">' + barsOf(['C', 'RR', 'R', 'RPC', 'F']) + '</div></div>' +
-      '<div class="sec"><div class="lab">JOURS FÉRIÉS TRAVAILLÉS (' + esc(S.territoire).toUpperCase() + ')</div><div class="card" style="padding:6px 14px">' + wl + '</div>' +
-      '<div class="sub" style="padding:8px 0 0">Compte un jour férié légal où tu as une permanence, ou une activité / un rendez-vous sans statut de repos.</div></div>';
+      '<div class="sec"><div class="lab">JOURS À RÉCUPÉRER (' + esc(S.territoire).toUpperCase() + ')</div><div class="card" style="padding:12px 14px">' + wl + '</div>' +
+      '<div class="sub" style="padding:8px 0 0">Pour utiliser un jour : mets un RR sur la date, puis choisis le jour récupéré. Repos hebdomadaires : comptés pour les semaines terminées depuis le ' + dFr(AG.REC_START) + ', sans congé, avec moins de 2 R.</div></div>';
   }
 
   function viewMonth() {
     const y = S.y, m = S.m, hol = holidays(y), first = AG.dow(y, m, 1), n = AG.daysIn(y, m);
-    let cells = '';
-    for (let i = 0; i < first; i++) cells += '<div></div>';
+    const arr = [];
+    for (let i = 0; i < first; i++) arr.push('<div></div>');
     for (let d = 1; d <= n; d++) {
       const iso = AG.iso(y, m, d), code = statutOf(iso), h = hol[iso], we = AG.dow(y, m, d) >= 5;
-      cells += '<button class="mc' + (code ? ' cat' : we ? ' we' : '') + (iso === S.date ? ' sel' : '') + '" style="' + cellStyle(code) + '" data-act="pickDay" data-date="' + iso + '" aria-label="' + fmtLong(iso) + '"><b>' + d + '</b><span class="' + (labelOf(iso).length > 4 ? 'lbl' : '') + '">' + esc(labelOf(iso)) + '</span>' +
+      const cell = '<button class="mc' + (code ? ' cat' : we ? ' we' : '') + (iso === S.date ? ' sel' : '') + '" style="' + cellStyle(code) + '" data-act="pickDay" data-date="' + iso + '" aria-label="' + fmtLong(iso) + '"><b>' + d + '</b><span class="' + (labelOf(iso).length > 4 ? 'lbl' : '') + '">' + esc(labelOf(iso)) + '</span>' +
         (h ? '<i class="dot' + (h.legal ? '' : ' loc') + '"></i>' : '') + '</button>';
+      arr.push(cell);
     }
+    let cells = '';
+    for (let r = 0; r * 7 < arr.length; r++) cells += '<div class="wn">' + AG.isoWeekNo(AG.isoOf(AG.addDays(new Date(Date.UTC(y, m - 1, 1)), 7 * r - first))) + '</div>' + arr.slice(r * 7, r * 7 + 7).join('');
     const sel = S.date, hh = (holidays(+sel.slice(0, 4)) || {})[sel], code = statutOf(sel);
     const list = dayEntries(sel, ['activite', 'rdv']).map((e) => '<div style="display:flex;gap:12px;align-items:baseline;font-size:14px"><div style="width:44px;font-size:12px;font-weight:600;color:#4B5563">' + esc(e.debut) + '</div><div>' + esc(e.kind === 'rdv' ? e.type : (e.detail || 'Activité')) + '</div></div>').join('');
     return '<div class="top"><div class="title">' + MOIS[m - 1] + ' ' + y + '</div>' + pill() + '<div style="display:flex;align-items:center;gap:2px">' +
       '<button class="iconbtn" data-act="mPrev" aria-label="Mois précédent">‹</button><button class="iconbtn" data-act="mNext" aria-label="Mois suivant">›</button>' + gear + '</div></div>' +
-      '<div class="wk">' + 'LMMJVSD'.split('').map((x) => '<div>' + x + '</div>').join('') + '</div><div class="m7">' + cells + '</div>' + legend() +
+      '<div class="wk w8"><div>S</div>' + 'LMMJVSD'.split('').map((x) => '<div>' + x + '</div>').join('') + '</div><div class="m7 w8">' + cells + '</div>' + legend() +
       (S.monSel ? '<div class="sec"><div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b style="font-size:15px">' + fmtLong(sel) + '</b>' +
       (code ? '<span style="font-size:11px;font-weight:700;' + chipStyle(code) + ';border-radius:999px;padding:3px 10px">' + esc(CATS[code].n) + (statutEntry(sel) && statutEntry(sel).debut ? ' ' + esc(statutEntry(sel).debut) + '–' + esc(statutEntry(sel).fin) : '') + '</span>' : '') + '</div>' +
       (hh ? '<div style="font-size:13px;color:#713F12">Jour férié : ' + esc(hh.nom) + '</div>' : '') + (list || '<div style="font-size:13px;color:#4B5563">Rien de noté.</div>') +
       '<button data-act="goDay" data-date="' + sel + '" style="text-align:left;font-size:13px;font-weight:600;color:#1D4ED8;min-height:32px">Ouvrir le détail du jour →</button>' +
       '<div class="lab" style="margin:4px 0 0">STATUT</div>' + statusUI(sel) + '</div></div>' : '');
   }
+
+  const dFr = (iso) => { const [, m, d] = iso.split('-').map(Number); return d + ' ' + MOIS[m - 1].toLowerCase(); };
+  const weekRange = (mon) => { const sun = AG.isoOf(AG.addDays(AG.parseIso(mon), 6)); const [, m1, d1] = mon.split('-').map(Number), [, m2, d2] = sun.split('-').map(Number); return m1 === m2 ? 'du ' + d1 + ' au ' + d2 + ' ' + MOIS[m2 - 1].toLowerCase() : 'du ' + dFr(mon) + ' au ' + dFr(sun); };
+  const recRefs = () => { const r = {}; S.entries.forEach((e) => { if (e.kind === 'statut' && !e.del && e.statut === 'RR' && e.type) r[e.type] = e.date; }); return r; };
+  const recFor = (y) => AG.recup(y, { hol: holidays(y), st: statutOf, act: (iso) => dayEntries(iso, ['activite', 'rdv']).length > 0, refs: recRefs(), today: todayIso, start: AG.REC_START });
+  const credLabel = (x) => x.g === 'F' ? 'Jour férié : ' + (x.nom || dFr(x.iso)) + (x.iso ? ' (' + dFr(x.iso) + ')' : '') : x.g === 'G' ? 'Sainte-Geneviève ' + x.id.slice(2) : 'Semaine ' + AG.isoWeekNo(x.iso) + ' · ' + weekRange(x.iso) + (x.k > 1 ? ' (' + x.k + 'e repos)' : '');
+  const credSub = (x) => x.orphan ? 'Ce crédit n\'existe plus (semaine ou jour modifié)' : x.g === 'F' ? (x.how === 'ACT' ? 'Activité / rendez-vous' : CATS[x.how === 'P' ? 'PERM' : x.how].n) : x.g === 'G' ? 'Crédité le 3 janvier' : 'Repos hebdomadaire non pris';
+  const ORDER = { F: 0, G: 1, H: 2 };
+  const recSorted = (y) => recFor(y).sort((a, b) => ORDER[a.g] - ORDER[b.g] || (a.iso || '').localeCompare(b.iso || '') || (a.k || 0) - (b.k || 0));
 
   function statusUI(date) {
     const code = statutOf(date);
@@ -289,6 +307,12 @@
         panel += '<div class="permbox"><div class="lab" style="margin:0 0 6px">HORAIRE</div><div class="row2"><div class="field"><label for="h-d">De</label><input class="inp" type="time" id="h-d" data-h="debut" value="' + esc(se ? se.debut : '') + '"></div><div class="field"><label for="h-f">À</label><input class="inp" type="time" id="h-f" data-h="fin" value="' + esc(se ? se.fin : '') + '"></div></div>' +
           (pr.length ? '<div class="chips" style="margin-top:6px">' + pr.map((p, i) => '<button class="chip" style="height:36px;font-size:13px" data-act="preset" data-i="' + i + '">' + p[0] + '</button>').join('') + '</div>' : '') + '</div>';
       }
+    }
+    if (code === 'RR') {
+      const cur = se && se.type || '', y0 = +date.slice(0, 4);
+      const opts = recSorted(y0 - 1).concat(recSorted(y0)).filter((x) => !x.used || x.used === date);
+      panel += '<div class="permbox"><div class="lab" style="margin:6px 0 4px">JOUR RÉCUPÉRÉ</div>' + (opts.length ? opts.map((x) => '<label class="pc"><input type="radio" name="rec" data-act="recRef" data-id="' + esc(x.id) + '"' + (cur === x.id ? ' checked' : '') + '><span>' + esc(credLabel(x)) + '<div style="font-size:12px;color:#4B5563">' + esc(credSub(x)) + '</div></span></label>').join('') : '<div style="font-size:13px;color:#4B5563;padding:6px 0">Aucun jour à récupérer pour l\'instant.</div>') +
+        (cur ? '<button class="chip" style="height:34px;font-size:13px;margin-top:6px" data-act="recClear">Ne rien rattacher</button>' : '') + '</div>';
     }
     return '<div class="chips">' + chips + '</div>' + panel +
       '<div class="row2" style="margin-top:10px">' + (code ? '<button class="btn" data-act="statut" data-code="">✕ Effacer le statut</button>' : '') + '<button class="btn" data-act="openPer">📅 Plusieurs jours…</button></div>';
@@ -437,6 +461,7 @@
     if (a === 'terr') { S.territoire = el.value; await kvSet('territoire', el.value); render(); }
     if (a === 'loc') { S.local = el.checked; await kvSet('local', el.checked); render(); }
     if (el.dataset && el.dataset.p && S.per) { S.per[el.dataset.p] = el.value; if (el.dataset.p === 'from' && S.per.to < el.value) S.per.to = el.value; S.keepScroll = true; render(); }
+    if (a === 'recRef') { const e = statutEntry(S.date); if (e) { S.keepScroll = true; await saveEntry(Object.assign({}, e, { type: el.dataset.id })); render(); } }
     if (a === 'permType') { const k = el.dataset.code; S.keepScroll = true; if (el.checked) await setStatut(S.date, k); else await setStatut(S.date, ''); S.permOpen = S.date; render(); }
     if (a === 'permSet') { const k = el.dataset.code, cur = permsOn(); await savePerms(el.checked ? PERM_TYPES.filter((x) => cur.includes(x) || x === k) : cur.filter((x) => x !== k)); S.keepScroll = true; render(); }
     if (el.dataset && el.dataset.h) { const e = statutEntry(S.date); if (e) { const n = Object.assign({}, e); n[el.dataset.h] = el.value; await saveEntry(n); S.keepScroll = true; render(); } }
@@ -459,9 +484,10 @@
       else if (a === 'statut') {
         S.keepScroll = true; const c = b.dataset.code;
         if (c === '_perm') { const po = permsOn(); if (po.length === 1 && !isPerm(statutOf(S.date))) await setStatut(S.date, po[0]); else S.permOpen = S.date; }
-        else { S.permOpen = ''; await setStatut(S.date, c); }
+        else { S.permOpen = ''; if (c !== statutOf(S.date)) await setStatut(S.date, c); }
         render();
       }
+      else if (a === 'recClear') { const e = statutEntry(S.date); if (e) { S.keepScroll = true; await saveEntry(Object.assign({}, e, { type: '' })); render(); } }
       else if (a === 'preset') { const e = statutEntry(S.date), p = (PRESETS[e && e.statut] || [])[+b.dataset.i]; if (e && p) { S.keepScroll = true; await saveEntry(Object.assign({}, e, { debut: p[1], fin: p[2] })); render(); } }
       else if (a === 'openPer') { S.per = { from: S.date, to: S.date, code: '', skipWe: false }; S.perBack = S.view; S.view = 'periode'; render(); }
       else if (a === 'perCode') { S.per.code = b.dataset.code; S.keepScroll = true; render(); }
