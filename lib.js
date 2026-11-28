@@ -80,10 +80,14 @@
   AG.recup = function (y, c) {
     const out = [], start = c.start || AG.REC_START, pre = y + '-';
     Object.keys(c.hol).sort().forEach((iso) => {
-      const h = c.hol[iso]; if (!iso.startsWith(pre) || !h.legal) return;
-      const code = c.st(iso); let how = '';
-      if (PERM_CODES.includes(code)) how = code; else if (!code && c.act(iso)) how = 'ACT';
-      if (how) out.push({ id: 'F:' + iso, g: 'F', iso, nom: h.nom, how });
+      const h = c.hol[iso]; if (!iso.startsWith(pre) || !h.legal || iso < start || iso >= c.today) return;
+      const code = c.st(iso), mon = AG.mondayOf(iso), dow = (AG.parseIso(iso).getUTCDay() + 6) % 7;
+      let nC = 0, nROther = 0;
+      for (let i = 0; i < 7; i++) { const d = AG.isoOf(AG.addDays(AG.parseIso(mon), i)), cd = c.st(d); if (cd === 'C') nC++; if (cd === 'R' && d !== iso) nROther++; }
+      let auto = '';
+      if (code === 'C') auto = 'conge'; else if (dow >= 5 && nC > 0) auto = 'weekend'; else if (code === 'R' && nROther >= 2) auto = 'repos';
+      const how = code || (c.act(iso) ? 'ACT' : 'BLANC');
+      out.push({ id: 'F:' + iso, g: 'F', iso, nom: h.nom, how, auto });
     });
     const gen = AG.iso(y, 1, 3); if (gen >= start) out.push({ id: 'G:' + y, g: 'G', iso: gen });
     let mon = AG.mondayOf(AG.iso(y, 1, 1));
@@ -102,20 +106,32 @@
       if (p[0] === 'F') yy = +p[1].slice(0, 4); else if (p[0] === 'G') yy = +p[1]; else if (p[0] === 'H') yy = +AG.isoOf(AG.addDays(AG.parseIso(p[1]), 3)).slice(0, 4);
       if (yy === y) out.push({ id, g: p[0], iso: p[1].length > 4 ? p[1] : '', k: +p[2] || 0, orphan: true });
     });
-    out.forEach((x) => { x.used = c.refs[x.id] || ''; });
+    out.forEach((x) => { x.used = x.auto ? x.iso : (c.refs[x.id] || ''); });
     return out;
   };
 
   /* Jours de permission réellement décomptés : dans une suite de jours de congé consécutifs,
      chaque période de 7 jours contient 2 jours de repos (les 5 premiers comptent, les 2 suivants non). */
-  AG.congeCounted = (dates) => {
+  AG.congeCounted = (dates, isHol) => {
     const sorted = Array.from(new Set(dates)).sort(), out = new Set(); let prev = null, idx = 0;
     sorted.forEach((iso) => {
       const cont = prev && AG.isoOf(AG.addDays(AG.parseIso(prev), 1)) === iso;
       idx = cont ? idx + 1 : 0; prev = iso;
-      if (idx % 7 < 5) out.add(iso);
+      if (idx % 7 < 5 && !(isHol && isHol(iso))) out.add(iso);
     });
     return out;
+  };
+
+  /* Solde de permission : s = solde saisi à la date sd ; q = droit annuel ajouté chaque 1er janvier ;
+     counted = Set des jours décomptés. Retourne le détail pour l'année y (ou null). */
+  AG.soldePerm = (cfg, counted, y) => {
+    if (cfg.s === null || cfg.s === undefined || cfg.s === '' || !cfg.sd) return null;
+    const y0 = +cfg.sd.slice(0, 4); if (y < y0) return null;
+    const takenIn = (yr) => { let n = 0; counted.forEach((iso) => { if (+iso.slice(0, 4) === yr && iso > cfg.sd) n++; }); return n; };
+    let run = +cfg.s, prevEnd = +cfg.s, pris = 0;
+    for (let yr = y0; yr <= y; yr++) { if (yr > y0) run += (+cfg.q || 0); pris = takenIn(yr); prevEnd = run; run -= pris; }
+    const first = y === y0;
+    return { base: first, report: first ? +cfg.s : prevEnd - (y > y0 ? (+cfg.q || 0) : 0), droits: first ? 0 : (+cfg.q || 0), pris, reste: run };
   };
 
   /* ---------- Outils base64 / aléatoire ---------- */
@@ -278,14 +294,14 @@
       async updateRow(n, row) { await this.writeRows(n, [row]); },
       async clearRow(n) { await this.writeRows(n, [new Array(32).fill('')]); },
       async getMeta() {
-        const j = await call('/values/' + encodeURIComponent('Réglages!A2:B12') + '?valueRenderOption=FORMATTED_VALUE');
+        const j = await call('/values/' + encodeURIComponent('Réglages!A2:B14') + '?valueRenderOption=FORMATTED_VALUE');
         const m = {};
         (j.values || []).forEach((r) => { if (r[0]) m[r[0]] = r[1] || ''; });
         return m;
       },
       async setMeta(meta) {
-        const keys = ['version', 'salt', 'wrapPw', 'saltRec', 'wrapRec', 'iter', 'perms'];
-        await call('/values/' + encodeURIComponent('Réglages!A5:B11') + '?valueInputOption=RAW',
+        const keys = ['version', 'salt', 'wrapPw', 'saltRec', 'wrapRec', 'iter', 'perms', 'cfg'];
+        await call('/values/' + encodeURIComponent('Réglages!A5:B12') + '?valueInputOption=RAW',
           { method: 'PUT', body: JSON.stringify({ values: keys.map((k) => [k, meta[k] || '']) }) });
       },
       async getTerritoire() {

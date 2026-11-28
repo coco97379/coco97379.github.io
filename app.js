@@ -90,8 +90,8 @@
     let m = u.match(/values\/Jours!A(\d+):AF(\d+)/);
     if (m && opts.method === 'PUT') { body.values.forEach((v, i) => { const x = v.slice(); while (x.length && x[x.length - 1] === '') x.pop(); demo.rows[+m[1] - 2 + i] = x; }); return ok(); }
     if (u.includes('/values/Jours!A2:AF')) return ok({ values: demo.rows });
-    if (u.includes('Réglages!A5:B11')) { body.values.forEach(([k, v]) => { demo.meta[k] = v; }); return ok(); }
-    if (u.includes('Réglages!A2:B12')) return ok({ values: Object.entries(demo.meta) });
+    if (u.includes('Réglages!A5:B12')) { body.values.forEach(([k, v]) => { demo.meta[k] = v; }); return ok(); }
+    if (u.includes('Réglages!A2:B14')) return ok({ values: Object.entries(demo.meta) });
     if (u.includes('Réglages!B2')) return ok({ values: [['Guyane']] });
     return { ok: false, status: 404, json: async () => ({}) };
   };
@@ -108,7 +108,7 @@
     try {
       const a = api();
       if (S.metaDirty) { await a.setMeta(S.meta); S.metaDirty = false; await kvSet('metaDirty', false); }
-      if (!S.metaDirty) { const rm = await a.getMeta().catch(() => null); if (rm && rm.perms !== undefined && rm.perms !== ((S.meta && S.meta.perms) || '')) { S.meta = Object.assign({}, S.meta, { perms: rm.perms }); await kvSet('meta', S.meta); S.perms = parsePerms(rm.perms); } }
+      if (!S.metaDirty) { const rm = await a.getMeta().catch(() => null); if (rm) { const up = {}; ['perms', 'cfg'].forEach((k) => { if (rm[k] !== undefined && rm[k] !== ((S.meta && S.meta[k]) || '')) up[k] = rm[k]; }); if (Object.keys(up).length) { S.meta = Object.assign({}, S.meta, up); await kvSet('meta', S.meta); S.perms = parsePerms(S.meta.perms); } } }
       const r = await AG.sync(a, S.rows, S.pending);
       await persist(); await refreshEntries();
       if (!S.tmp.terrChecked) { S.tmp.terrChecked = true; const t = await kvGet('territoire'); if (!t) { const tr = await a.getTerritoire().catch(() => ''); if (AG.TERRITOIRES.includes(tr)) { S.territoire = tr; await kvSet('territoire', tr); } } }
@@ -182,7 +182,7 @@
     return '';
   }
   const gear = '<button class="iconbtn" data-act="settings" aria-label="Réglages"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>';
-  const logo = '<div class="logo"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></div>';
+  const logo = '<div class="logo"><img src="icon-192.png" alt="" width="76" height="76"></div>';
   const chipStyle = (k) => 'background:' + CATS[k].c + ';color:' + CATS[k].t + (CATS[k].w ? ';box-shadow:inset 0 0 0 1px #9CA3AF' : '');
   function legend() {
     const ks = Object.keys(CATS).filter((k) => !isPerm(k) || permsOn().includes(k));
@@ -205,9 +205,10 @@
     if (ph === 'reset') return '<div class="center">' + logo + '<h1>Mot de passe oublié</h1><p>Entre ton code de récupération puis choisis un nouveau mot de passe.</p>' +
       '<input class="inp" id="rc" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX" autocapitalize="characters" autocomplete="off"><input class="inp" id="pw1" type="password" autocomplete="new-password" placeholder="Nouveau mot de passe">' + err +
       '<button class="btn pri" data-act="reset">Valider</button><button class="link" data-act="toUnlock">Retour</button></div>';
-    return '<div class="center">' + logo + '<h1>Agenda</h1><p>Entre ton mot de passe</p><input class="inp" id="pw" type="password" autocomplete="current-password" placeholder="Mot de passe">' + err +
+    return '<div class="lock"><div class="hero"><div class="flag"><i></i><i></i><i></i></div><div class="shade"></div><div class="brand"><img src="icon-192.png" alt="" width="96" height="96"><h1>Agenda</h1><p>Gendarmerie · Guyane</p></div></div>' +
+      '<div class="sheet"><input class="inp" id="pw" type="password" autocomplete="current-password" placeholder="Mot de passe">' + err +
       '<button class="btn pri" data-act="unlock">Déverrouiller</button><button class="link" data-act="toReset">Mot de passe oublié ?</button>' +
-      '<p style="font-size:12px;margin-top:10px">Se reverrouille après 5 minutes d\'inactivité.</p>' + (S.pending.size ? '<div>' + pill() + '</div>' : '') + '</div>';
+      '<p class="note">Se reverrouille après 5 minutes d\'inactivité.</p>' + (S.pending.size ? '<div>' + pill() + '</div>' : '') + '</div></div>';
   }
 
   function cellStyle(code) { return code ? 'background:' + CATS[code].c + ';color:' + CATS[code].t + ';' : ''; }
@@ -229,34 +230,43 @@
       '<div class="yscroll"><div class="ygrid">' + head + rows + '</div></div>';
   }
 
+  const isLegalHol = (iso) => { const h = holidays(+iso.slice(0, 4))[iso]; return !!(h && h.legal); };
+  const congeSet = () => { const ds = []; S.entries.forEach((e) => { if (e.kind === 'statut' && !e.del && e.statut === 'C') ds.push(e.date); }); return AG.congeCounted(ds, isLegalHol); };
+  const cfg = () => { let o = {}; try { o = JSON.parse((S.meta && S.meta.cfg) || '{}'); } catch (e) { o = {}; } return Object.assign({ q: 45, s: null, sd: '', c: null, cd: '' }, o); };
+  const cfcLeft = () => { const c = cfg(); if (c.c === null || c.c === '' || !c.cd) return null; let n = 0; S.entries.forEach((e) => { if (e.kind === 'statut' && !e.del && e.statut === 'RR' && e.type === 'CFC' && e.date > c.cd) n++; }); return { reste: +c.c - n, pris: n, base: +c.c }; };
+  async function saveCfg(patch) { const c = Object.assign(cfg(), patch); S.meta = Object.assign({}, S.meta, { cfg: JSON.stringify({ q: c.q, s: c.s, sd: c.sd, c: c.c, cd: c.cd }) }); S.metaDirty = true; await kvSet('meta', S.meta); await kvSet('metaDirty', true); scheduleSync(0); }
+
   function stats(y) {
     const cnt = {}; Object.keys(CATS).forEach((k) => { cnt[k] = 0; });
     const pre = String(y) + '-', worked = [], hol = holidays(y);
-    const congeDates = [];
-    S.entries.forEach((e) => { if (e.kind === 'statut' && !e.del) { const c = e.statut === 'P' ? 'PERM' : e.statut; if (c === 'C') { congeDates.push(e.date); return; } if (e.date.startsWith(pre) && cnt[c] !== undefined) cnt[c]++; } });
-    AG.congeCounted(congeDates).forEach((iso) => { if (iso.startsWith(pre)) cnt.C++; });
-    Object.keys(hol).sort().forEach((iso) => {
-      const h = hol[iso]; if (!h.legal || !iso.startsWith(pre)) return;
-      const c = statutOf(iso), act = dayEntries(iso, ['activite', 'rdv']).length > 0;
-      if (isPerm(c)) worked.push({ iso, nom: h.nom, how: CATS[c].n }); else if (!c && act) worked.push({ iso, nom: h.nom, how: 'Activité / rendez-vous' });
-    });
+    S.entries.forEach((e) => { if (e.kind === 'statut' && !e.del) { const c = e.statut === 'P' ? 'PERM' : e.statut; if (c === 'C') return; if (e.date.startsWith(pre) && cnt[c] !== undefined) cnt[c]++; } });
+    congeSet().forEach((iso) => { if (iso.startsWith(pre)) cnt.C++; });
+    recFor(y).filter((x) => x.g === 'F' && !x.auto).forEach((x) => worked.push(x));
     return { cnt, worked };
+  }
+  function soldesCard(y) {
+    const c = cfg(), sp = AG.soldePerm(c, congeSet(), y), cl = cfcLeft(), row = (l, v, b) => '<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span style="color:var(--muted)">' + l + '</span><span style="' + (b ? 'font-weight:700' : '') + '">' + v + '</span></div>';
+    if (!sp && !cl) return '<div class="sec"><div class="card" style="padding:12px 14px;font-size:13px;color:var(--muted)">Pour suivre tes jours de permission restants et tes CFC, renseigne tes soldes dans Réglages.</div></div>';
+    return '<div class="sec"><div class="lab">SOLDES</div><div class="card" style="padding:10px 14px">' +
+      (sp ? '<div style="font-weight:600;font-size:13px;margin-bottom:2px">Jours de permission ' + y + '</div>' + row(sp.base ? 'Solde saisi le ' + dFr(c.sd) : 'Report de ' + (y - 1), sp.report) + (sp.base ? '' : row('Droits de l\'année', '+ ' + sp.droits)) + row(sp.base ? 'Pris depuis (décomptés)' : 'Pris dans l\'année', '− ' + sp.pris) + row('Reste fin ' + y + ' (reporté sur ' + (y + 1) + ')', sp.reste, 1) : '') +
+      (cl ? '<div style="font-weight:600;font-size:13px;margin:8px 0 2px">CFC</div>' + row('Solde saisi le ' + dFr(c.cd), cl.base) + row('Pris (via RR)', '− ' + cl.pris) + row('Restants', cl.reste, 1) : '') + '</div></div>';
   }
   function viewCompteurs() {
     const y = S.cy, { cnt, worked } = stats(y), po = ['PAM', 'A', 'OPJ', 'PERM'], totalP = po.reduce((t, k) => t + cnt[k], 0);
-    const big = (n, l, c) => '<div class="card" style="padding:12px 14px;flex:1;min-width:0"><div style="font-size:28px;font-weight:700;line-height:1.1;color:' + c + '">' + n + '</div><div style="font-size:12px;color:#4B5563;margin-top:2px">' + l + '</div></div>';
+    const big = (n, l, c) => '<div class="card" style="padding:12px 14px;flex:1;min-width:0"><div style="font-size:28px;font-weight:700;line-height:1.1;color:' + c + '">' + n + '</div><div style="font-size:12px;color:var(--muted);margin-top:2px">' + l + '</div></div>';
     const barsOf = (keys) => { const max = Math.max(1, ...keys.map((k) => cnt[k])); return keys.map((k) => '<div style="display:flex;align-items:center;gap:8px;min-height:30px"><div style="width:84px;font-size:12px;flex:none">' + esc(k === 'C' ? 'Congé/perm.' : k === 'A' ? 'Accueil' : k === 'PERM' ? 'Perm' : k === 'RR' ? 'RR' : k === 'R' ? 'Repos' : k === 'F' ? 'Formation' : k) + '</div>' +
-      '<div style="flex:1;background:#E5E7EB;border-radius:6px;height:20px;overflow:hidden"><div style="height:100%;width:' + Math.round(cnt[k] / max * 100) + '%;background:' + (CATS[k].w ? '#6B7280' : CATS[k].t === '#FF3B30' ? CATS[k].c : CATS[k].c === '#BFDBFE' ? '#60A5FA' : CATS[k].c) + ';border-radius:6px"></div></div><div style="width:30px;text-align:right;font-weight:700;font-size:13px">' + cnt[k] + '</div></div>').join(''); };
+      '<div style="flex:1;background:#2C2C2E;border-radius:6px;height:20px;overflow:hidden"><div style="height:100%;width:' + Math.round(cnt[k] / max * 100) + '%;background:' + (CATS[k].w ? '#6B7280' : CATS[k].t === '#FF3B30' ? CATS[k].c : CATS[k].c === '#BFDBFE' ? '#60A5FA' : CATS[k].c) + ';border-radius:6px"></div></div><div style="width:30px;text-align:right;font-weight:700;font-size:13px">' + cnt[k] + '</div></div>').join(''); };
     const cr = recSorted(y), restants = cr.filter((x) => !x.used).length, pris = cr.length - restants;
     const grp = (g, titre) => { const it = cr.filter((x) => x.g === g); if (!it.length) return ''; const r = it.filter((x) => !x.used).length;
-      return '<div style="margin-top:12px"><div style="display:flex;justify-content:space-between;font-size:13px;font-weight:600;margin-bottom:2px"><span>' + titre + '</span><span style="font-size:12px;padding:2px 8px;border-radius:10px;background:' + (r ? '#DCFCE7;color:#166534' : '#E5E7EB;color:#374151') + '">' + r + ' restant' + (r > 1 ? 's' : '') + ' sur ' + it.length + '</span></div>' +
-        it.map((x) => '<div style="display:flex;gap:10px;align-items:center;font-size:13px;padding:7px 0;border-top:1px solid #E5E7EB"><div style="flex:1">' + esc(credLabel(x)) + '<div style="font-size:12px;color:#4B5563">' + esc(credSub(x)) + '</div></div>' +
-          (x.used ? '<button style="font-size:12px;font-weight:600;color:#1D4ED8;min-height:32px" data-act="goDay" data-date="' + x.used + '">Pris le ' + dFr(x.used) + '</button>' : '<span style="font-size:12px;color:#92400E;font-weight:600">À prendre</span>') + '</div>').join('') + '</div>'; };
-    const wl = cr.length ? '<div class="kpis3" style="display:flex;gap:8px"><div style="flex:1;text-align:center"><div style="font-size:24px;font-weight:700;color:#166534">' + restants + '</div><div style="font-size:11px;color:#4B5563">à prendre</div></div><div style="flex:1;text-align:center"><div style="font-size:24px;font-weight:700">' + pris + '</div><div style="font-size:11px;color:#4B5563">pris</div></div><div style="flex:1;text-align:center"><div style="font-size:24px;font-weight:700">' + cr.length + '</div><div style="font-size:11px;color:#4B5563">acquis</div></div></div>' +
-      grp('F', 'Jours fériés travaillés') + grp('G', 'Sainte-Geneviève') + grp('H', 'Repos hebdomadaires non pris') : '<div style="font-size:13px;color:#4B5563">Rien à récupérer pour l\'instant.</div>';
+      return '<div style="margin-top:12px"><div style="display:flex;justify-content:space-between;font-size:13px;font-weight:600;margin-bottom:2px"><span>' + titre + '</span><span style="font-size:12px;padding:2px 8px;border-radius:10px;background:' + (r ? '#14532D;color:#DCFCE7' : '#2C2C2E;color:#D4D4D8') + '">' + r + ' restant' + (r > 1 ? 's' : '') + ' sur ' + it.length + '</span></div>' +
+        it.map((x) => '<div style="display:flex;gap:10px;align-items:center;font-size:13px;padding:7px 0;border-top:1px solid var(--line)"><div style="flex:1">' + esc(credLabel(x)) + '<div style="font-size:12px;color:var(--muted)">' + esc(credSub(x)) + '</div></div>' +
+          (x.used ? '<button style="font-size:12px;font-weight:600;color:#8FB0FF;min-height:32px" data-act="goDay" data-date="' + x.used + '">' + (x.g === 'F' && x.used === x.iso ? 'Pris le jour J' : 'Pris le ' + dFr(x.used)) + '</button>' : '<span style="font-size:12px;color:#92400E;font-weight:600">À prendre</span>') + '</div>').join('') + '</div>'; };
+    const wl = cr.length ? '<div class="kpis3" style="display:flex;gap:8px"><div style="flex:1;text-align:center"><div style="font-size:24px;font-weight:700;color:#166534">' + restants + '</div><div style="font-size:11px;color:var(--muted)">à prendre</div></div><div style="flex:1;text-align:center"><div style="font-size:24px;font-weight:700">' + pris + '</div><div style="font-size:11px;color:var(--muted)">pris</div></div><div style="flex:1;text-align:center"><div style="font-size:24px;font-weight:700">' + cr.length + '</div><div style="font-size:11px;color:var(--muted)">acquis</div></div></div>' +
+      grp('F', 'Jours fériés travaillés') + grp('G', 'Sainte-Geneviève') + grp('H', 'Repos hebdomadaires non pris') : '<div style="font-size:13px;color:var(--muted)">Rien à récupérer pour l\'instant.</div>';
     return '<div class="top"><div class="title">Compteurs ' + y + '</div>' + pill() + '<div style="display:flex;align-items:center;gap:2px"><button class="iconbtn" data-act="cPrev" aria-label="Année précédente">‹</button><button class="iconbtn" data-act="cNext" aria-label="Année suivante">›</button>' + gear + '</div></div>' +
+      soldesCard(y) +
       '<div class="sec" style="display:flex;gap:10px">' + big(cnt.C, 'jours de permission décomptés', '#DC2626') + big(cnt.RR, 'repos récupérateurs', '#16A34A') + '</div>' +
-      '<div class="sec" style="display:flex;gap:10px;padding-top:0">' + big(totalP, 'jours de permanence', '#1D4ED8') + big(worked.length, 'jours fériés travaillés', '#B45309') + '</div>' +
+      '<div class="sec" style="display:flex;gap:10px;padding-top:0">' + big(totalP, 'jours de permanence', '#8FB0FF') + big(worked.length, 'jours fériés travaillés', '#B45309') + '</div>' +
       '<div class="sub" style="padding:0 16px 4px">Permission : sur 7 jours consécutifs, seuls 5 jours sont décomptés (les 2 autres sont des repos hebdomadaires).</div>' +
       '<div class="sec"><div class="lab">PERMANENCES PAR TYPE</div><div class="card" style="padding:10px 14px">' + barsOf(po) + '</div></div>' +
       '<div class="sec" style="padding-top:0"><div class="lab">AUTRES STATUTS</div><div class="card" style="padding:10px 14px">' + barsOf(['C', 'RR', 'R', 'RPC', 'F']) + '</div></div>' +
@@ -277,14 +287,14 @@
     let cells = '';
     for (let r = 0; r * 7 < arr.length; r++) cells += '<div class="wn">' + AG.isoWeekNo(AG.isoOf(AG.addDays(new Date(Date.UTC(y, m - 1, 1)), 7 * r - first))) + '</div>' + arr.slice(r * 7, r * 7 + 7).join('');
     const sel = S.date, hh = (holidays(+sel.slice(0, 4)) || {})[sel], code = statutOf(sel);
-    const list = dayEntries(sel, ['activite', 'rdv']).map((e) => '<div style="display:flex;gap:12px;align-items:baseline;font-size:14px"><div style="width:44px;font-size:12px;font-weight:600;color:#4B5563">' + esc(e.debut) + '</div><div>' + esc(e.kind === 'rdv' ? e.type : (e.detail || 'Activité')) + '</div></div>').join('');
+    const list = dayEntries(sel, ['activite', 'rdv']).map((e) => '<div style="display:flex;gap:12px;align-items:baseline;font-size:14px"><div style="width:44px;font-size:12px;font-weight:600;color:var(--muted)">' + esc(e.debut) + '</div><div>' + esc(e.kind === 'rdv' ? e.type : (e.detail || 'Activité')) + '</div></div>').join('');
     return '<div class="top"><div class="title">' + MOIS[m - 1] + ' ' + y + '</div>' + pill() + '<div style="display:flex;align-items:center;gap:2px">' +
       '<button class="iconbtn" data-act="mPrev" aria-label="Mois précédent">‹</button><button class="iconbtn" data-act="mNext" aria-label="Mois suivant">›</button>' + gear + '</div></div>' +
       '<div class="wk w8"><div>S</div>' + 'LMMJVSD'.split('').map((x) => '<div>' + x + '</div>').join('') + '</div><div class="m7 w8">' + cells + '</div>' + legend() +
       (S.monSel ? '<div class="sec"><div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b style="font-size:15px">' + fmtLong(sel) + '</b>' +
       (code ? '<span style="font-size:11px;font-weight:700;' + chipStyle(code) + ';border-radius:999px;padding:3px 10px">' + esc(CATS[code].n) + (statutEntry(sel) && statutEntry(sel).debut ? ' ' + esc(statutEntry(sel).debut) + '–' + esc(statutEntry(sel).fin) : '') + '</span>' : '') + '</div>' +
-      (hh ? '<div style="font-size:13px;color:#713F12">Jour férié : ' + esc(hh.nom) + '</div>' : '') + (list || '<div style="font-size:13px;color:#4B5563">Rien de noté.</div>') +
-      '<button data-act="goDay" data-date="' + sel + '" style="text-align:left;font-size:13px;font-weight:600;color:#1D4ED8;min-height:32px">Ouvrir le détail du jour →</button>' +
+      (hh ? '<div style="font-size:13px;color:#713F12">Jour férié : ' + esc(hh.nom) + '</div>' : '') + (list || '<div style="font-size:13px;color:var(--muted)">Rien de noté.</div>') +
+      '<button data-act="goDay" data-date="' + sel + '" style="text-align:left;font-size:13px;font-weight:600;color:#8FB0FF;min-height:32px">Ouvrir le détail du jour →</button>' +
       '<div class="lab" style="margin:4px 0 0">STATUT</div>' + statusUI(sel) + '</div></div>' : '');
   }
 
@@ -293,14 +303,14 @@
   const recRefs = () => { const r = {}; S.entries.forEach((e) => { if (e.kind === 'statut' && !e.del && e.statut === 'RR' && e.type) r[e.type] = e.date; }); return r; };
   const recFor = (y) => AG.recup(y, { hol: holidays(y), st: statutOf, act: (iso) => dayEntries(iso, ['activite', 'rdv']).length > 0, refs: recRefs(), today: todayIso, start: AG.REC_START });
   const credLabel = (x) => x.g === 'F' ? 'Jour férié : ' + (x.nom || dFr(x.iso)) + (x.iso ? ' (' + dFr(x.iso) + ')' : '') : x.g === 'G' ? 'Sainte-Geneviève ' + x.id.slice(2) : 'Semaine ' + AG.isoWeekNo(x.iso) + ' · ' + weekRange(x.iso) + (x.k > 1 ? ' (' + x.k + 'e repos)' : '');
-  const credSub = (x) => x.orphan ? 'Ce crédit n\'existe plus (semaine ou jour modifié)' : x.g === 'F' ? (x.how === 'ACT' ? 'Activité / rendez-vous' : CATS[x.how === 'P' ? 'PERM' : x.how].n) : x.g === 'G' ? 'Crédité le 3 janvier' : 'Repos hebdomadaire non pris';
+  const credSub = (x) => x.orphan ? 'Ce crédit n\'existe plus (semaine ou jour modifié)' : x.g === 'F' ? (x.auto === 'conge' ? 'Pendant une permission : pris le jour J' : x.auto === 'weekend' ? 'Week-end en semaine de permission : pris le jour J' : x.auto === 'repos' ? 'Repos hebdomadaire déjà complet : pris le jour J' : x.how === 'ACT' ? 'Activité / rendez-vous' : x.how === 'BLANC' ? 'Jour travaillé (case blanche)' : CATS[x.how === 'P' ? 'PERM' : x.how].n) : x.g === 'G' ? 'Crédité le 3 janvier' : 'Repos hebdomadaire non pris';
   const ORDER = { F: 0, G: 1, H: 2 };
   const recSorted = (y) => recFor(y).sort((a, b) => ORDER[a.g] - ORDER[b.g] || (a.iso || '').localeCompare(b.iso || '') || (a.k || 0) - (b.k || 0));
 
   function statusUI(date) {
     const code = statutOf(date);
     const po = permsOn(), perm = isPerm(code), open = perm || S.permOpen === date;
-    const chips = CHIPS.map(([k, n]) => { const on = k === '_perm' ? open : code === k; return '<button class="chip' + (on ? ' on' : '') + '" style="' + (on ? (k === '_perm' ? 'background:#111827;color:#fff' : chipStyle(k)) : '') + '" data-act="statut" data-code="' + k + '">' + n + '</button>'; }).join('');
+    const chips = CHIPS.map(([k, n]) => { const on = k === '_perm' ? open : code === k; return '<button class="chip' + (on ? ' on' : '') + '" style="' + (on ? (k === '_perm' ? 'background:#4F7DFF;color:#fff' : chipStyle(k)) : '') + '" data-act="statut" data-code="' + k + '">' + n + '</button>'; }).join('');
     const se = statutEntry(date);
     let panel = '';
     if (open) {
@@ -314,7 +324,8 @@
     if (code === 'RR') {
       const cur = se && se.type || '', y0 = +date.slice(0, 4);
       const opts = recSorted(y0 - 1).concat(recSorted(y0)).filter((x) => !x.used || x.used === date);
-      panel += '<div class="permbox"><div class="lab" style="margin:6px 0 4px">JOUR RÉCUPÉRÉ</div>' + (opts.length ? opts.map((x) => '<label class="pc"><input type="radio" name="rec" data-act="recRef" data-id="' + esc(x.id) + '"' + (cur === x.id ? ' checked' : '') + '><span>' + esc(credLabel(x)) + '<div style="font-size:12px;color:#4B5563">' + esc(credSub(x)) + '</div></span></label>').join('') : '<div style="font-size:13px;color:#4B5563;padding:6px 0">Aucun jour à récupérer pour l\'instant.</div>') +
+      const cl = cfcLeft(), cfcOpt = cl && (cl.reste > 0 || cur === 'CFC') ? '<label class="pc"><input type="radio" name="rec" data-act="recRef" data-id="CFC"' + (cur === 'CFC' ? ' checked' : '') + '><span>CFC<div style="font-size:12px;color:var(--muted)">' + (cur === 'CFC' ? cl.reste + ' restant(s) après celui-ci' : cl.reste + ' restant(s)') + '</div></span></label>' : '';
+      panel += '<div class="permbox"><div class="lab" style="margin:6px 0 4px">JOUR RÉCUPÉRÉ</div>' + cfcOpt + (opts.length ? opts.map((x) => '<label class="pc"><input type="radio" name="rec" data-act="recRef" data-id="' + esc(x.id) + '"' + (cur === x.id ? ' checked' : '') + '><span>' + esc(credLabel(x)) + '<div style="font-size:12px;color:var(--muted)">' + esc(credSub(x)) + '</div></span></label>').join('') : (cfcOpt ? '' : '<div style="font-size:13px;color:var(--muted);padding:6px 0">Aucun jour à récupérer pour l\'instant.</div>')) +
         (cur ? '<button class="chip" style="height:34px;font-size:13px;margin-top:6px" data-act="recClear">Ne rien rattacher</button>' : '') + '</div>';
     }
     return '<div class="chips">' + chips + '</div>' + panel +
@@ -330,8 +341,8 @@
         (sub ? '<div>' + esc(sub) + '</div>' : (e.kind === 'rdv' && e.detail ? '<div>' + esc(e.detail) + '</div>' : '')) + '</div>' + (e.kind === 'rdv' ? '<span class="tag">RDV</span>' : '') + '</button>';
     }).join('');
     const note = S.entries.get('no-' + date); const noteTxt = note && !note.del ? note.detail : '';
-    return '<div class="top" style="padding-bottom:0"><button data-act="backMonth" style="height:44px;font-size:14px;font-weight:600;color:#1D4ED8">‹ ' + MOIS[m - 1] + ' ' + y + '</button><div style="display:flex;align-items:center;gap:2px">' + pill() + gear + '</div></div>' +
-      '<div class="sec" style="padding-top:0"><div class="title">' + fmtLong(date) + '</div><div style="font-size:12px;color:#4B5563">Semaine ' + isoWeek(y, m, d) + '</div></div>' +
+    return '<div class="top" style="padding-bottom:0"><button data-act="backMonth" style="height:44px;font-size:14px;font-weight:600;color:#8FB0FF">‹ ' + MOIS[m - 1] + ' ' + y + '</button><div style="display:flex;align-items:center;gap:2px">' + pill() + gear + '</div></div>' +
+      '<div class="sec" style="padding-top:0"><div class="title">' + fmtLong(date) + '</div><div style="font-size:12px;color:var(--muted)">Semaine ' + isoWeek(y, m, d) + '</div></div>' +
       (hh ? '<div class="banner">Jour férié : ' + esc(hh.nom) + '</div>' : '') +
       '<div class="sec"><div class="lab">STATUT DU JOUR</div>' + statusUI(date) + '</div>' +
       '<div class="sec"><div class="lab">ACTIVITÉ ET RENDEZ-VOUS</div>' + items + '<div class="sp"></div>' +
@@ -356,10 +367,10 @@
   function viewPer() {
     const P = S.per, days = perDays(P), erase = P.code === '-';
     const chips = permsOn().map((k) => [k, CATS[k].n]).concat(CHIPS.slice(1)).map(([k, n]) => '<button class="chip' + (P.code === k ? ' on' : '') + '" style="' + (P.code === k ? chipStyle(k) : '') + '" data-act="perCode" data-code="' + k + '">' + n + '</button>').join('') +
-      '<button class="chip' + (erase ? ' on' : '') + '" style="' + (erase ? 'background:#111827' : '') + '" data-act="perCode" data-code="-">✕ Effacer</button>';
+      '<button class="chip' + (erase ? ' on' : '') + '" style="' + (erase ? 'background:#52525B' : '') + '" data-act="perCode" data-code="-">✕ Effacer</button>';
     const msg = P.to < P.from ? 'La date de fin est avant la date de début.' : !P.code ? 'Choisis un statut.' : days.length + ' jour' + (days.length > 1 ? 's' : '') + (erase ? ' à effacer' : ' à enregistrer') + (days.length >= 400 ? ' (maximum)' : '') + '.';
     const ok = P.code && days.length > 0 && P.to >= P.from;
-    return '<div class="top" style="padding-bottom:0"><button data-act="cancelPer" style="height:44px;font-size:14px;font-weight:600;color:#1D4ED8">‹ Retour</button><div>' + pill() + '</div></div>' +
+    return '<div class="top" style="padding-bottom:0"><button data-act="cancelPer" style="height:44px;font-size:14px;font-weight:600;color:#8FB0FF">‹ Retour</button><div>' + pill() + '</div></div>' +
       '<div class="sec" style="padding-top:0"><div class="title">Saisir sur plusieurs jours</div></div>' +
       '<div class="sec"><div class="lab">STATUT</div><div class="chips">' + chips + '</div></div>' +
       '<div class="sec"><div class="row2"><div class="field"><label for="p-from">Du</label><input class="inp" type="date" id="p-from" data-p="from" value="' + P.from + '"></div>' +
@@ -380,7 +391,7 @@
     const f = S.form, rdv = f.kind === 'rdv';
     const types = TYPES.map((t) => '<button class="chip' + (f.type === t ? ' on' : '') + '" style="' + (f.type === t ? 'background:#312E81' : '') + '" data-act="setType" data-type="' + t + '">' + t + '</button>').join('');
     const inp = (k, label, attrs) => '<div class="field"><label for="f-' + k + '">' + label + '</label><input class="inp" id="f-' + k + '" data-f="' + k + '" value="' + esc(f[k]) + '" ' + (attrs || '') + '></div>';
-    return '<div class="top" style="padding-bottom:0"><button data-act="cancelForm" style="height:44px;font-size:14px;font-weight:600;color:#1D4ED8">‹ ' + fmtLong(f.date) + '</button><div>' + pill() + '</div></div>' +
+    return '<div class="top" style="padding-bottom:0"><button data-act="cancelForm" style="height:44px;font-size:14px;font-weight:600;color:#8FB0FF">‹ ' + fmtLong(f.date) + '</button><div>' + pill() + '</div></div>' +
       '<div class="sec" style="padding-top:0"><div class="title">' + (f.id ? 'Modifier' : 'Nouveau') + (rdv ? ' rendez-vous' : 'e activité') + '</div></div>' +
       (rdv ? '<div class="sec"><div class="lab">TYPE</div><div class="chips">' + types + '</div>' +
         (f.type === 'Autre' ? '<div style="margin-top:10px">' + inp('typeLibre', 'Préciser le type', 'placeholder="Type libre…"') + '</div>' : '') + '</div>' : '') +
@@ -388,20 +399,25 @@
       (rdv ? '<div class="sec"><div class="lab">PERSONNE CONCERNÉE</div>' + inp('nom', 'Nom', 'placeholder="NOM Prénom" autocomplete="off"') + '</div>' +
         '<div class="sec"><div class="lab">UNA</div><div class="row2" style="gap:8px">' + inp('cu', 'Code unité', 'inputmode="numeric" placeholder="000" autocomplete="off"') + inp('np', 'N° de procédure', 'inputmode="numeric" placeholder="00000" autocomplete="off"') + inp('an', 'Année', 'inputmode="numeric" placeholder="' + f.date.slice(0, 4) + '" maxlength="4" autocomplete="off"') + '</div></div>' : '') +
       '<div class="sec"><div class="field"><label for="f-detail">' + (rdv ? 'Remarque (facultatif)' : 'Activité') + '</label><textarea class="inp" id="f-detail" data-f="detail" style="height:64px">' + esc(f.detail) + '</textarea></div>' +
-      '<div style="font-size:12px;color:#4B5563;margin-bottom:12px">Hors réseau, c\'est gardé dans le téléphone et envoyé au retour du réseau.</div>' +
+      '<div style="font-size:12px;color:var(--muted);margin-bottom:12px">Hors réseau, c\'est gardé dans le téléphone et envoyé au retour du réseau.</div>' +
       '<div class="row2"><button class="btn" data-act="cancelForm">Annuler</button><button class="btn pri" data-act="saveForm" style="flex:1.4">Enregistrer</button></div>' +
       (f.id ? '<div class="sp"></div><button class="btn warn" data-act="delEntry">' + (S.confirmDel ? 'Confirmer la suppression' : 'Supprimer') + '</button>' : '') + '<div class="err" style="margin-top:8px">' + esc(S.err) + '</div></div>';
   }
 
   function viewSettings() {
     const n = S.pending.size;
-    return '<div class="top"><button data-act="closeSettings" style="height:44px;font-size:14px;font-weight:600;color:#1D4ED8">‹ Retour</button>' + pill() + '</div>' +
+    return '<div class="top"><button data-act="closeSettings" style="height:44px;font-size:14px;font-weight:600;color:#8FB0FF">‹ Retour</button>' + pill() + '</div>' +
       '<div class="sec" style="padding-top:0"><div class="title">Réglages</div></div>' +
       '<div class="set"><h3>JOURS FÉRIÉS</h3><div class="field"><label for="terr">Territoire</label><select class="inp" id="terr" data-act="terr">' + AG.TERRITOIRES.map((t) => '<option' + (t === S.territoire ? ' selected' : '') + '>' + t + '</option>').join('') + '</select></div>' +
       '<label style="font-size:13px;display:flex;gap:8px;align-items:center"><input type="checkbox" id="loc" data-act="loc"' + (S.local ? ' checked' : '') + '> Montrer les usages locaux (jours gras en Guyane)</label></div>' +
-      '<div class="set"><h3>TYPES DE PERMANENCE</h3><div style="font-size:13px;color:#4B5563;margin-bottom:8px">Coche ceux que tu veux voir. Un seul coché : le bouton Permanence s\'applique directement.</div>' +
+      '<div class="set"><h3>SOLDES (À RÉGLER TOI-MÊME)</h3><div style="font-size:13px;color:var(--muted);margin-bottom:8px">Saisis ce qu\'il te reste aujourd\'hui. L\'appli déduit ensuite tes permissions et tes CFC pris, et ajoute le droit annuel chaque 1er janvier.</div>' +
+      '<div class="field"><label for="cf-s">Jours de permission restants à prendre</label><input class="inp" type="number" inputmode="decimal" step="0.5" id="cf-s" data-act="cfgSet" data-k="s" value="' + (cfg().s === null ? '' : esc(cfg().s)) + '"></div>' +
+      '<div class="field"><label for="cf-q">Droit annuel de permission (jours)</label><input class="inp" type="number" inputmode="decimal" id="cf-q" data-act="cfgSet" data-k="q" value="' + esc(cfg().q) + '"></div>' +
+      '<div class="field"><label for="cf-c">CFC restants à prendre</label><input class="inp" type="number" inputmode="decimal" step="0.5" id="cf-c" data-act="cfgSet" data-k="c" value="' + (cfg().c === null ? '' : esc(cfg().c)) + '"></div>' +
+      (cfg().sd || cfg().cd ? '<div style="font-size:12px;color:var(--muted)">Soldes saisis le ' + dFr(cfg().sd || cfg().cd) + '.</div>' : '') + '</div>' +
+      '<div class="set"><h3>TYPES DE PERMANENCE</h3><div style="font-size:13px;color:var(--muted);margin-bottom:8px">Coche ceux que tu veux voir. Un seul coché : le bouton Permanence s\'applique directement.</div>' +
       PERM_TYPES.map((k) => '<label class="pc"><input type="checkbox" data-act="permSet" data-code="' + k + '"' + (permsOn().includes(k) ? ' checked' : '') + '><span>' + esc(k === 'PERM' ? 'Permanence simple (Perm)' : CATS[k].n) + '</span><i class="pb" style="' + chipStyle(k) + '">' + esc(CATS[k].s) + '</i></label>').join('') + '</div>' +
-      '<div class="set"><h3>SYNCHRONISATION</h3><div style="font-size:13px;color:#4B5563;margin-bottom:10px">' + (n ? n + ' modification(s) en attente d\'envoi.' : S.sync === 'off' ? 'La dernière synchronisation a échoué' + (S.syncInfo ? ' (' + esc(S.syncInfo) + ')' : '') + '.' : 'Tout est envoyé dans le Sheet.') + '</div>' +
+      '<div class="set"><h3>SYNCHRONISATION</h3><div style="font-size:13px;color:var(--muted);margin-bottom:10px">' + (n ? n + ' modification(s) en attente d\'envoi.' : S.sync === 'off' ? 'La dernière synchronisation a échoué' + (S.syncInfo ? ' (' + esc(S.syncInfo) + ')' : '') + '.' : 'Tout est envoyé dans le Sheet.') + '</div>' +
       '<div class="row2"><button class="btn" data-act="syncNow">Synchroniser</button><button class="btn" data-act="reauth">Connexion Google</button></div></div>' +
       '<div class="set"><h3>MOT DE PASSE</h3><div class="field"><input class="inp" id="op" type="password" placeholder="Mot de passe actuel" autocomplete="current-password"></div><div class="field"><input class="inp" id="np2" type="password" placeholder="Nouveau mot de passe (10 caractères minimum)" autocomplete="new-password"></div>' +
       '<button class="btn" data-act="chgPw">Changer le mot de passe</button><div class="err" style="margin-top:8px">' + esc(S.err) + '</div></div>' +
@@ -464,6 +480,7 @@
     if (a === 'terr') { S.territoire = el.value; await kvSet('territoire', el.value); render(); }
     if (a === 'loc') { S.local = el.checked; await kvSet('local', el.checked); render(); }
     if (el.dataset && el.dataset.p && S.per) { S.per[el.dataset.p] = el.value; if (el.dataset.p === 'from' && S.per.to < el.value) S.per.to = el.value; S.keepScroll = true; render(); }
+    if (a === 'cfgSet') { const k = el.dataset.k, v = el.value === '' ? null : +el.value; const p = {}; p[k] = v; if (k === 's') p.sd = todayIso; if (k === 'c') p.cd = todayIso; await saveCfg(p); S.keepScroll = true; render(); }
     if (a === 'recRef') { const e = statutEntry(S.date); if (e) { S.keepScroll = true; await saveEntry(Object.assign({}, e, { type: el.dataset.id })); render(); } }
     if (a === 'permType') { const k = el.dataset.code; S.keepScroll = true; if (el.checked) await setStatut(S.date, k); else await setStatut(S.date, ''); S.permOpen = S.date; render(); }
     if (a === 'permSet') { const k = el.dataset.code, cur = permsOn(); await savePerms(el.checked ? PERM_TYPES.filter((x) => cur.includes(x) || x === k) : cur.filter((x) => x !== k)); S.keepScroll = true; render(); }
