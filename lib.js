@@ -106,6 +106,18 @@
     return out;
   };
 
+  /* Jours de permission réellement décomptés : dans une suite de jours de congé consécutifs,
+     chaque période de 7 jours contient 2 jours de repos (les 5 premiers comptent, les 2 suivants non). */
+  AG.congeCounted = (dates) => {
+    const sorted = Array.from(new Set(dates)).sort(), out = new Set(); let prev = null, idx = 0;
+    sorted.forEach((iso) => {
+      const cont = prev && AG.isoOf(AG.addDays(AG.parseIso(prev), 1)) === iso;
+      idx = cont ? idx + 1 : 0; prev = iso;
+      if (idx % 7 < 5) out.add(iso);
+    });
+    return out;
+  };
+
   /* ---------- Outils base64 / aléatoire ---------- */
   const b64 = (buf) => {
     const u = new Uint8Array(buf); let s = '';

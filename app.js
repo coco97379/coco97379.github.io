@@ -232,7 +232,9 @@
   function stats(y) {
     const cnt = {}; Object.keys(CATS).forEach((k) => { cnt[k] = 0; });
     const pre = String(y) + '-', worked = [], hol = holidays(y);
-    S.entries.forEach((e) => { if (e.kind === 'statut' && !e.del && e.date.startsWith(pre)) { const c = e.statut === 'P' ? 'PERM' : e.statut; if (cnt[c] !== undefined) cnt[c]++; } });
+    const congeDates = [];
+    S.entries.forEach((e) => { if (e.kind === 'statut' && !e.del) { const c = e.statut === 'P' ? 'PERM' : e.statut; if (c === 'C') { congeDates.push(e.date); return; } if (e.date.startsWith(pre) && cnt[c] !== undefined) cnt[c]++; } });
+    AG.congeCounted(congeDates).forEach((iso) => { if (iso.startsWith(pre)) cnt.C++; });
     Object.keys(hol).sort().forEach((iso) => {
       const h = hol[iso]; if (!h.legal || !iso.startsWith(pre)) return;
       const c = statutOf(iso), act = dayEntries(iso, ['activite', 'rdv']).length > 0;
@@ -253,8 +255,9 @@
     const wl = cr.length ? '<div class="kpis3" style="display:flex;gap:8px"><div style="flex:1;text-align:center"><div style="font-size:24px;font-weight:700;color:#166534">' + restants + '</div><div style="font-size:11px;color:#4B5563">à prendre</div></div><div style="flex:1;text-align:center"><div style="font-size:24px;font-weight:700">' + pris + '</div><div style="font-size:11px;color:#4B5563">pris</div></div><div style="flex:1;text-align:center"><div style="font-size:24px;font-weight:700">' + cr.length + '</div><div style="font-size:11px;color:#4B5563">acquis</div></div></div>' +
       grp('F', 'Jours fériés travaillés') + grp('G', 'Sainte-Geneviève') + grp('H', 'Repos hebdomadaires non pris') : '<div style="font-size:13px;color:#4B5563">Rien à récupérer pour l\'instant.</div>';
     return '<div class="top"><div class="title">Compteurs ' + y + '</div>' + pill() + '<div style="display:flex;align-items:center;gap:2px"><button class="iconbtn" data-act="cPrev" aria-label="Année précédente">‹</button><button class="iconbtn" data-act="cNext" aria-label="Année suivante">›</button>' + gear + '</div></div>' +
-      '<div class="sec" style="display:flex;gap:10px">' + big(cnt.C, 'jours de congé / permission', '#DC2626') + big(cnt.RR, 'repos récupérateurs', '#16A34A') + '</div>' +
+      '<div class="sec" style="display:flex;gap:10px">' + big(cnt.C, 'jours de permission décomptés', '#DC2626') + big(cnt.RR, 'repos récupérateurs', '#16A34A') + '</div>' +
       '<div class="sec" style="display:flex;gap:10px;padding-top:0">' + big(totalP, 'jours de permanence', '#1D4ED8') + big(worked.length, 'jours fériés travaillés', '#B45309') + '</div>' +
+      '<div class="sub" style="padding:0 16px 4px">Permission : sur 7 jours consécutifs, seuls 5 jours sont décomptés (les 2 autres sont des repos hebdomadaires).</div>' +
       '<div class="sec"><div class="lab">PERMANENCES PAR TYPE</div><div class="card" style="padding:10px 14px">' + barsOf(po) + '</div></div>' +
       '<div class="sec" style="padding-top:0"><div class="lab">AUTRES STATUTS</div><div class="card" style="padding:10px 14px">' + barsOf(['C', 'RR', 'R', 'RPC', 'F']) + '</div></div>' +
       '<div class="sec"><div class="lab">JOURS À RÉCUPÉRER (' + esc(S.territoire).toUpperCase() + ')</div><div class="card" style="padding:12px 14px">' + wl + '</div>' +
