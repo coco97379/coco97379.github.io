@@ -189,6 +189,9 @@
     return '<div class="legend">' + ks.map((k) => '<div class="lg"><div class="lgb" style="' + chipStyle(k) + '">' + esc(CATS[k].s) + '</div>' + esc(CATS[k].n.replace('Repos physiologique compensatoire', 'Rep. physio. comp.').replace('Repos récupérateur', 'Rep. récup.').replace('Repos hebdomadaire', 'Repos').replace('Congé / permission', 'Congé/perm.')) + '</div>').join('') +
       '<div class="lg"><div class="lgb" style="background:#fff;color:#111;box-shadow:inset 0 0 0 1px #9CA3AF">RDV</div>Rendez-vous</div><div class="lg"><div class="lgb" style="background:#fff;color:#111;box-shadow:inset 0 0 0 1px #9CA3AF">AC</div>Activité</div></div>';
   }
+  const hd = (sub, title, btns) => '<div class="hd"><div class="hd1"><span class="eyebrow">' + sub + '</span>' + pill() + '</div><div class="hd2"><div class="title">' + title + '</div><div class="hbtn">' + btns + '</div></div></div>';
+  const accy = (y) => '<span class="acc">' + y + '</span>';
+  const evc = (t, title, sub, bg, fg) => '<div class="ev"><div class="evt">' + t + '</div><div class="evc" style="background:' + bg + ';color:' + fg + '"><div class="evh">' + title + '</div>' + (sub ? '<div class="evs">' + sub + '</div>' : '') + '</div></div>';
   const fmtLong = (iso) => { const [y, m, d] = iso.split('-').map(Number); return JOURS[AG.dow(y, m, d)] + ' ' + d + ' ' + MOIS[m - 1].toLowerCase(); };
 
   function viewLock() {
@@ -247,8 +250,9 @@
   function soldesCard(y) {
     const c = cfg(), sp = AG.soldePerm(c, congeSet(), y), cl = cfcLeft(), row = (l, v, b) => '<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span style="color:var(--muted)">' + l + '</span><span style="' + (b ? 'font-weight:700' : '') + '">' + v + '</span></div>';
     if (!sp && !cl) return '<div class="sec"><div class="card" style="padding:12px 14px;font-size:13px;color:var(--muted)">Pour suivre tes jours de permission restants et tes CFC, renseigne tes soldes dans Réglages.</div></div>';
-    return '<div class="sec"><div class="lab">SOLDES</div><div class="card" style="padding:10px 14px">' +
-      (sp ? '<div style="font-weight:600;font-size:13px;margin-bottom:2px">Jours de permission ' + y + '</div>' + row(sp.base ? 'Solde saisi le ' + dFr(c.sd) : 'Report de ' + (y - 1), sp.report) + (sp.base ? '' : row('Droits de l\'année', '+ ' + sp.droits)) + row(sp.base ? 'Pris depuis (décomptés)' : 'Pris dans l\'année', '− ' + sp.pris) + row('Reste fin ' + y + ' (reporté sur ' + (y + 1) + ')', sp.reste, 1) : '') +
+    const tot = sp ? (sp.base ? sp.report : sp.report + sp.droits) : 0, pc = tot > 0 ? Math.max(0, Math.min(100, Math.round(sp.reste / tot * 100))) : 0;
+    return '<div class="sec"><div class="card" style="padding:16px 18px">' +
+      (sp ? '<div style="display:flex;justify-content:space-between;align-items:baseline"><span class="lab" style="margin:0">PERMISSIONS RESTANTES</span><span style="font-size:12px;color:var(--muted)">sur ' + tot + ' jours</span></div><div style="font-size:42px;font-weight:700;line-height:1.1;margin-top:2px">' + sp.reste + ' <span style="font-size:15px;color:var(--muted);font-weight:500">jours</span></div><div class="track"><div style="width:' + pc + '%"></div></div><div style="font-weight:600;font-size:13px;margin:12px 0 2px">Détail ' + y + '</div>' + row(sp.base ? 'Solde saisi le ' + dFr(c.sd) : 'Report de ' + (y - 1), sp.report) + (sp.base ? '' : row('Droits de l\'année', '+ ' + sp.droits)) + row(sp.base ? 'Pris depuis (décomptés)' : 'Pris dans l\'année', '− ' + sp.pris) + row('Reste fin ' + y + ' (reporté sur ' + (y + 1) + ')', sp.reste, 1) : '') +
       (cl ? '<div style="font-weight:600;font-size:13px;margin:8px 0 2px">CFC</div>' + row('Solde saisi le ' + dFr(c.cd), cl.base) + row('Pris (via RR)', '− ' + cl.pris) + row('Restants', cl.reste, 1) : '') + '</div></div>';
   }
   function viewCompteurs() {
@@ -263,14 +267,13 @@
           (x.used ? '<button style="font-size:12px;font-weight:600;color:#8FB0FF;min-height:32px" data-act="goDay" data-date="' + x.used + '">' + (x.g === 'F' && x.used === x.iso ? 'Pris le jour J' : 'Pris le ' + dFr(x.used)) + '</button>' : '<span style="font-size:12px;color:#92400E;font-weight:600">À prendre</span>') + '</div>').join('') + '</div>'; };
     const wl = cr.length ? '<div class="kpis3" style="display:flex;gap:8px"><div style="flex:1;text-align:center"><div style="font-size:24px;font-weight:700;color:#166534">' + restants + '</div><div style="font-size:11px;color:var(--muted)">à prendre</div></div><div style="flex:1;text-align:center"><div style="font-size:24px;font-weight:700">' + pris + '</div><div style="font-size:11px;color:var(--muted)">pris</div></div><div style="flex:1;text-align:center"><div style="font-size:24px;font-weight:700">' + cr.length + '</div><div style="font-size:11px;color:var(--muted)">acquis</div></div></div>' +
       grp('F', 'Jours fériés travaillés') + grp('G', 'Sainte-Geneviève') + grp('H', 'Repos hebdomadaires non pris') : '<div style="font-size:13px;color:var(--muted)">Rien à récupérer pour l\'instant.</div>';
-    return '<div class="top"><div class="title">Compteurs ' + y + '</div>' + pill() + '<div style="display:flex;align-items:center;gap:2px"><button class="iconbtn" data-act="cPrev" aria-label="Année précédente">‹</button><button class="iconbtn" data-act="cNext" aria-label="Année suivante">›</button>' + gear + '</div></div>' +
+    const tile = (n, l, c) => '<div class="tile"><div class="tn"' + (c ? ' style="color:' + c + '"' : '') + '>' + n + '</div><div class="tl2">' + l + '</div></div>';
+    return hd(esc(S.territoire), 'Compteurs ' + accy(y), '<button class="iconbtn" data-act="cPrev" aria-label="Année précédente">‹</button><button class="iconbtn" data-act="cNext" aria-label="Année suivante">›</button>' + gear) +
       soldesCard(y) +
-      '<div class="sec" style="display:flex;gap:10px">' + big(cnt.C, 'jours de permission décomptés', '#DC2626') + big(cnt.RR, 'repos récupérateurs', '#16A34A') + '</div>' +
-      '<div class="sec" style="display:flex;gap:10px;padding-top:0">' + big(totalP, 'jours de permanence', '#8FB0FF') + big(worked.length, 'jours fériés travaillés', '#B45309') + '</div>' +
-      '<div class="sub" style="padding:0 16px 4px">Permission : sur 7 jours consécutifs, seuls 5 jours sont décomptés (les 2 autres sont des repos hebdomadaires).</div>' +
-      '<div class="sec"><div class="lab">PERMANENCES PAR TYPE</div><div class="card" style="padding:10px 14px">' + barsOf(po) + '</div></div>' +
-      '<div class="sec" style="padding-top:0"><div class="lab">AUTRES STATUTS</div><div class="card" style="padding:10px 14px">' + barsOf(['C', 'RR', 'R', 'RPC', 'F']) + '</div></div>' +
-      '<div class="sec"><div class="lab">JOURS À RÉCUPÉRER (' + esc(S.territoire).toUpperCase() + ')</div><div class="card" style="padding:12px 14px">' + wl + '</div>' +
+      '<div class="sec tiles">' + tile(cnt.RR, 'RR pris') + tile(worked.length, 'Fériés travaillés') + tile(restants, 'À récupérer', '#8FB0FF') + '</div>' +
+      '<div class="sec" style="padding-top:10px"><div class="card" style="padding:14px 16px"><div class="lab">PERMANENCES</div>' + barsOf(po) + '<div class="sub" style="padding:6px 0 0">' + totalP + ' jours de permanence</div></div></div>' +
+      '<div class="sec" style="padding-top:10px"><div class="card" style="padding:14px 16px"><div class="lab">AUTRES STATUTS</div>' + barsOf(['C', 'RR', 'R', 'RPC', 'F']) + '<div class="sub" style="padding:6px 0 0">Permission : sur 7 jours consécutifs, seuls 5 sont décomptés (les 2 autres sont des repos hebdomadaires).</div></div></div>' +
+      '<div class="sec"><div class="card" style="padding:14px 16px"><div class="lab">JOURS À RÉCUPÉRER (' + esc(S.territoire).toUpperCase() + ')</div>' + wl + '</div>' +
       '<div class="sub" style="padding:8px 0 0">Pour utiliser un jour : mets un RR sur la date, puis choisis le jour récupéré. Repos hebdomadaires : comptés pour les semaines terminées depuis le ' + dFr(AG.REC_START) + ', sans congé, avec moins de 2 R.</div></div>';
   }
 
@@ -287,13 +290,14 @@
     let cells = '';
     for (let r = 0; r * 7 < arr.length; r++) cells += '<div class="wn">' + AG.isoWeekNo(AG.isoOf(AG.addDays(new Date(Date.UTC(y, m - 1, 1)), 7 * r - first))) + '</div>' + arr.slice(r * 7, r * 7 + 7).join('');
     const sel = S.date, hh = (holidays(+sel.slice(0, 4)) || {})[sel], code = statutOf(sel);
-    const list = dayEntries(sel, ['activite', 'rdv']).map((e) => '<div style="display:flex;gap:12px;align-items:baseline;font-size:14px"><div style="width:44px;font-size:12px;font-weight:600;color:var(--muted)">' + esc(e.debut) + '</div><div>' + esc(e.kind === 'rdv' ? e.type : (e.detail || 'Activité')) + '</div></div>').join('');
-    return '<div class="top"><div class="title">' + MOIS[m - 1] + ' ' + y + '</div>' + pill() + '<div style="display:flex;align-items:center;gap:2px">' +
-      '<button class="iconbtn" data-act="mPrev" aria-label="Mois précédent">‹</button><button class="iconbtn" data-act="mNext" aria-label="Mois suivant">›</button>' + gear + '</div></div>' +
-      '<div class="wk w8"><div>S</div>' + 'LMMJVSD'.split('').map((x) => '<div>' + x + '</div>').join('') + '</div><div class="m7 w8">' + cells + '</div>' + legend() +
-      (S.monSel ? '<div class="sec"><div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b style="font-size:15px">' + fmtLong(sel) + '</b>' +
-      (code ? '<span style="font-size:11px;font-weight:700;' + chipStyle(code) + ';border-radius:999px;padding:3px 10px">' + esc(CATS[code].n) + (statutEntry(sel) && statutEntry(sel).debut ? ' ' + esc(statutEntry(sel).debut) + '–' + esc(statutEntry(sel).fin) : '') + '</span>' : '') + '</div>' +
-      (hh ? '<div style="font-size:13px;color:#713F12">Jour férié : ' + esc(hh.nom) + '</div>' : '') + (list || '<div style="font-size:13px;color:var(--muted)">Rien de noté.</div>') +
+    const se = statutEntry(sel), tl = [];
+    if (hh) tl.push(evc('', 'Jour férié', esc(hh.nom), '#F59E0B', '#111111'));
+    if (code) tl.push(evc(se && se.debut ? esc(se.debut) : '', esc(code === 'A' ? labelOf(sel) : CATS[code].n), se && se.debut ? esc(se.debut) + ' – ' + esc(se.fin) : '', CATS[code].c, CATS[code].t === '#FF3B30' ? '#FFFFFF' : CATS[code].t));
+    dayEntries(sel, ['activite', 'rdv']).forEach((e) => tl.push(e.kind === 'rdv' ? evc(esc(e.debut), 'RDV', esc([e.type, e.detail].filter(Boolean).join(' · ')), '#7C3AED', '#FFFFFF') : evc(esc(e.debut), 'Activité', esc(e.detail || ''), '#0E7490', '#FFFFFF')));
+    return hd(esc(S.territoire) + ' · Semaine ' + AG.isoWeekNo(S.date), MOIS[m - 1] + ' ' + accy(y), '<button class="iconbtn" data-act="mPrev" aria-label="Mois précédent">‹</button><button class="iconbtn" data-act="mNext" aria-label="Mois suivant">›</button>' + gear) +
+      '<div class="calcard"><div class="wk w8"><div>S</div>' + 'LMMJVSD'.split('').map((x) => '<div>' + x + '</div>').join('') + '</div><div class="m7 w8">' + cells + '</div></div>' + legend() +
+      (S.monSel ? '<div class="dayh"><b>' + fmtLong(sel).replace(/^./, (c) => c.toUpperCase()) + '</b><span>Semaine ' + AG.isoWeekNo(sel) + '</span></div><div class="tl">' + (tl.join('') || '<div class="evs" style="padding:4px 14px;color:var(--muted)">Rien de noté.</div>') + '</div>' +
+      '<div class="sec"><div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">' +
       '<button data-act="goDay" data-date="' + sel + '" style="text-align:left;font-size:13px;font-weight:600;color:#8FB0FF;min-height:32px">Ouvrir le détail du jour →</button>' +
       '<div class="lab" style="margin:4px 0 0">STATUT</div>' + statusUI(sel) + '</div></div>' : '');
   }
